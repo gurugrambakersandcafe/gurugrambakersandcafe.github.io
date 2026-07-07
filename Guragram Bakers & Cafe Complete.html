@@ -1,0 +1,3208 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gurugram Baker's &amp; Cafe — Premium Redesign</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fbf7f2',
+              100: '#f3e8d9',
+              200: '#e6d0b2',
+              300: '#d6b183',
+              400: '#c68f58',
+              500: '#b5753b',
+              600: '#995d2c',
+              700: '#7a4924',
+              800: '#5d381d',
+              900: '#2f1d15'
+            },
+            cafe: {
+              cream: '#f9f6f0',
+              pearl: '#fffdfa',
+              ink: '#111113',
+              stone: '#1a1715',
+              latte: '#e9dbc8',
+              gold: '#dfb55a'
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+            display: ['Cormorant Garamond', 'Georgia', 'serif']
+          },
+          boxShadow: {
+            glow: '0 18px 60px rgba(17,17,19,0.15)',
+            soft: '0 20px 45px rgba(39, 25, 17, 0.12)',
+            panel: '0 18px 40px rgba(15,15,18,0.12)'
+          },
+          backgroundImage: {
+            'hero-wash': 'radial-gradient(circle at top left, rgba(223,181,90,0.24), transparent 30%), radial-gradient(circle at bottom right, rgba(198,143,88,0.18), transparent 30%)'
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+  <!-- ============================================================
+    FIREBASE REALTIME DATABASE — enables cross-device order sync
+    ============================================================ -->
+  <script type="module">
+    // ================================================================
+    // STEP 1 OF 1 FOR YOU:
+    //   Go to https://console.firebase.google.com
+    //   → Add project → Create Realtime Database → Test mode
+    //   → Project settings → Your apps → Add Web app
+    //   → Copy the firebaseConfig object and paste it below,
+    //     replacing every value inside the quotes.
+    // ================================================================
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import { getDatabase, ref, set, get, onValue, push, update } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAYFS72h6Wc4U0vtw0yy-tc6bXwepoA4cA",
+      authDomain: "gurugram-bakers.firebaseapp.com",
+      databaseURL: "https://gurugram-bakers-default-rtdb.firebaseio.com",
+      projectId: "gurugram-bakers",
+      storageBucket: "gurugram-bakers.firebasestorage.app",
+      messagingSenderId: "488611077937",
+      appId: "1:488611077937:web:a51fc9bcf8107249915a10"
+    };
+
+    // Initialise Firebase and expose helpers onto window for the main script
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // ── In-memory caches (keeps synchronous getXxx() calls working) ──
+    window._fbCache = {
+      orders: [],
+      coupons: [],
+      tokenConfig: { active: false, items: [], rewardDivisor: 50, rewardTokens: 2 },
+      usersDb: {}
+    };
+
+    // ── Read helpers ────────────────────────────────────────────────
+    window.fbGetOrders      = () => window._fbCache.orders;
+    window.fbGetCoupons     = () => window._fbCache.coupons;
+    window.fbGetTokenConfig = () => window._fbCache.tokenConfig;
+    window.fbGetUsersDb     = () => window._fbCache.usersDb;
+
+    // ── Write helpers ───────────────────────────────────────────────
+    window.fbSaveOrders = async (orders) => {
+      window._fbCache.orders = orders;
+      await set(ref(db, 'gcafe/orders'), orders);
+    };
+    window.fbSaveCoupons = async (coupons) => {
+      window._fbCache.coupons = coupons;
+      await set(ref(db, 'gcafe/coupons'), coupons);
+    };
+    window.fbSaveTokenConfig = async (config) => {
+      window._fbCache.tokenConfig = config;
+      await set(ref(db, 'gcafe/tokenConfig'), config);
+    };
+    window.fbSaveUsersDb = async (usersDb) => {
+      window._fbCache.usersDb = usersDb;
+      await set(ref(db, 'gcafe/usersDb'), usersDb);
+    };
+
+    // ── Bootstrap: load initial data then attach real-time listeners ─
+    async function bootFirebase() {
+      // Load all collections once on startup
+      const [ordSnap, cpnSnap, tokSnap, usrSnap] = await Promise.all([
+        get(ref(db, 'gcafe/orders')),
+        get(ref(db, 'gcafe/coupons')),
+        get(ref(db, 'gcafe/tokenConfig')),
+        get(ref(db, 'gcafe/usersDb'))
+      ]);
+      window._fbCache.orders      = ordSnap.val()  || [];
+      window._fbCache.coupons     = cpnSnap.val()  || [];
+      window._fbCache.tokenConfig = tokSnap.val()  || { active: false, items: [], rewardDivisor: 50, rewardTokens: 2 };
+      window._fbCache.usersDb     = usrSnap.val()  || {};
+
+      // Real-time listener: orders
+      onValue(ref(db, 'gcafe/orders'), (snap) => {
+        window._fbCache.orders = snap.val() || [];
+        window.dispatchEvent(new Event('ordersUpdated'));
+      });
+
+      // Real-time listener: coupons
+      onValue(ref(db, 'gcafe/coupons'), (snap) => {
+        window._fbCache.coupons = snap.val() || [];
+        window.dispatchEvent(new CustomEvent('gcafe_coupons_updated'));
+      });
+
+      // Real-time listener: token config
+      onValue(ref(db, 'gcafe/tokenConfig'), (snap) => {
+        window._fbCache.tokenConfig = snap.val() || { active: false, items: [], rewardDivisor: 50, rewardTokens: 2 };
+        window.dispatchEvent(new Event('tokenConfigUpdated'));
+      });
+
+      // Real-time listener: user DB
+      onValue(ref(db, 'gcafe/usersDb'), (snap) => {
+        window._fbCache.usersDb = snap.val() || {};
+      });
+
+      // Signal to the main script that Firebase is ready
+      window._firebaseReady = true;
+      window.dispatchEvent(new Event('firebaseReady'));
+    }
+
+    bootFirebase().catch(err => {
+      console.error('Firebase boot failed:', err);
+      // Fallback: signal ready anyway so the app still loads (offline mode)
+      window._firebaseReady = true;
+      window.dispatchEvent(new Event('firebaseReady'));
+    });
+  </script>
+  <style>
+    :root {
+      --espresso: #161311;
+      --espresso-2: #241b16;
+      --cream: #f9f6f0;
+      --latte: #e7d9c4;
+      --caramel: #b5753b;
+      --amber: #dfb55a;
+      --line: rgba(57, 35, 24, 0.09);
+      --glass-light: rgba(255, 255, 255, 0.7);
+      --glass-dark: rgba(23, 23, 28, 0.72);
+    }
+
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(223,181,90,0.08), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(181,117,59,0.08), transparent 22%),
+        var(--cream);
+      color: #171412;
+      transition: background-color .3s ease, color .3s ease;
+      overflow-x: hidden;
+    }
+
+    .dark body {
+      background:
+        radial-gradient(circle at top left, rgba(223,181,90,0.08), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(181,117,59,0.08), transparent 20%),
+        #0c0c0f;
+      color: #f7f4ee;
+    }
+
+    .brand-heading { font-family: 'Cormorant Garamond', Georgia, serif; letter-spacing: -0.03em; }
+    .view { min-height: 100vh; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .glass-panel {
+      background: var(--glass-light);
+      border: 1px solid rgba(255,255,255,0.55);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 20px 50px rgba(28, 21, 17, 0.12);
+    }
+
+    .dark .glass-panel {
+      background: var(--glass-dark);
+      border-color: rgba(255,255,255,0.08);
+      box-shadow: 0 22px 52px rgba(0,0,0,0.38);
+    }
+
+    .surface-card {
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(54, 35, 24, 0.08);
+      box-shadow: 0 18px 45px rgba(41, 27, 19, 0.08);
+    }
+
+    .dark .surface-card {
+      background: rgba(20,20,24,0.92);
+      border-color: rgba(255,255,255,0.08);
+      box-shadow: 0 18px 45px rgba(0,0,0,0.32);
+    }
+
+    .premium-border { border: 1px solid rgba(181,117,59,0.18); }
+
+    .button-press,
+    .card-lift,
+    .soft-raise {
+      transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background-color .22s ease, color .22s ease, opacity .22s ease;
+    }
+
+    .button-press:active { transform: scale(.98); }
+    .card-lift:hover { transform: translateY(-4px); }
+    .soft-raise:hover { transform: translateY(-2px); }
+
+    .warm-gradient {
+      background: linear-gradient(135deg, #2a1a12 0%, #6f4326 52%, #cf9559 100%);
+    }
+
+    .gold-gradient {
+      background: linear-gradient(135deg, #e8cb8b 0%, #dfb55a 48%, #b5753b 100%);
+    }
+
+    .dark-panel {
+      background: linear-gradient(180deg, rgba(25,22,20,0.98), rgba(15,15,18,0.96));
+    }
+
+    .shadow-glow { box-shadow: 0 18px 50px rgba(32, 21, 16, 0.18); }
+
+    .menu-card-image::after,
+    .hero-slide::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(9,9,11,0.04) 0%, rgba(9,9,11,0.5) 100%);
+    }
+
+    .hero-slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity .8s ease;
+    }
+    .hero-slide.active { opacity: 1; }
+
+    .slider-dot {
+      width: .5rem;
+      height: .5rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,.38);
+      transition: width .24s ease, background-color .24s ease;
+    }
+    .slider-dot.active {
+      width: 1.5rem;
+      background: #fff;
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .85rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(51,32,20,0.08);
+      background: rgba(255,255,255,0.84);
+      font-size: .82rem;
+      font-weight: 700;
+      color: #4b3a30;
+      box-shadow: 0 10px 24px rgba(25, 18, 14, 0.06);
+      white-space: nowrap;
+    }
+
+    .dark .filter-chip {
+      background: rgba(25,25,31,0.92);
+      color: #efeae2;
+      border-color: rgba(255,255,255,0.08);
+    }
+
+    .filter-chip.active {
+      background: linear-gradient(135deg, #6f4326 0%, #b5753b 100%);
+      color: white;
+      border-color: transparent;
+      box-shadow: 0 16px 30px rgba(111, 67, 38, 0.28);
+    }
+
+    .tab-btn {
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.72);
+      padding: .9rem 1rem;
+      border-radius: 1rem;
+      font-size: .85rem;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      white-space: nowrap;
+      transition: all .22s ease;
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, #b5753b 0%, #dfb55a 100%);
+      border-color: transparent;
+      color: #1c120d;
+      box-shadow: 0 16px 30px rgba(181,117,59,0.25);
+    }
+
+    .date-btn {
+      padding: .7rem 1rem;
+      font-size: .78rem;
+      font-weight: 800;
+      border-radius: .95rem;
+      border: 1px solid rgba(53, 35, 22, 0.08);
+      background: rgba(255,255,255,0.85);
+      color: #4a3a31;
+      transition: all .22s ease;
+    }
+    .date-btn.active {
+      background: linear-gradient(135deg, #6f4326 0%, #b5753b 100%);
+      color: white;
+      border-color: transparent;
+      box-shadow: 0 16px 30px rgba(111,67,38,0.18);
+    }
+    .dark .date-btn {
+      background: rgba(24,24,28,0.95);
+      color: #f4ede4;
+      border-color: rgba(255,255,255,.08);
+    }
+
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .cal-day {
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: .9rem;
+      font-size: .8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .18s ease;
+    }
+    .cal-day:hover { background: rgba(181,117,59,0.12); }
+    .cal-day.selected {
+      background: linear-gradient(135deg, #6f4326 0%, #b5753b 100%);
+      color: white;
+      box-shadow: 0 14px 25px rgba(111,67,38,0.18);
+    }
+    .cal-day.today { outline: 1px dashed rgba(181,117,59,0.75); }
+
+    .loader {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: white;
+      animation: spin 1s linear infinite;
+    }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: -120px;
+      transform: translateX(-50%);
+      z-index: 99999;
+      min-width: 260px;
+      max-width: calc(100vw - 32px);
+      border-radius: 999px;
+      padding: 14px 18px;
+      background: rgba(19, 19, 24, 0.96);
+      color: white;
+      box-shadow: 0 20px 45px rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.08);
+      transition: bottom .35s cubic-bezier(.2,.75,.25,1);
+      font-weight: 700;
+      text-align: center;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    #toast.show { bottom: 26px; }
+
+    .float-orb {
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(18px);
+      opacity: .75;
+      animation: float 8s ease-in-out infinite;
+    }
+
+    .fade-up { animation: fadeUp .45s ease both; }
+    .pop-in { animation: popIn .35s cubic-bezier(.17,.84,.44,1) both; }
+    .pulse-soft { animation: pulseSoft 2.4s ease-in-out infinite; }
+    .shimmer {
+      background: linear-gradient(90deg, rgba(255,255,255,.2) 25%, rgba(255,255,255,.45) 37%, rgba(255,255,255,.2) 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.8s ease infinite;
+    }
+
+    .dark .shimmer {
+      background: linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.12) 37%, rgba(255,255,255,.06) 63%);
+      background-size: 400% 100%;
+    }
+
+    .quick-cart-bar {
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      background: rgba(19, 18, 20, 0.92);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 22px 50px rgba(0,0,0,0.26);
+    }
+
+    .order-ring {
+      position: absolute;
+      left: 17px;
+      top: 42px;
+      bottom: -12px;
+      width: 2px;
+      background: linear-gradient(180deg, rgba(181,117,59,.45), rgba(181,117,59,.04));
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes pulseSoft {
+      0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(223,181,90,.22); }
+      50% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(223,181,90,0); }
+    }
+    @keyframes shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: 0 0; }
+    }
+    @keyframes float {
+      0%,100% { transform: translateY(0) translateX(0); }
+      50% { transform: translateY(-18px) translateX(8px); }
+    }
+  </style>
+</head>
+<body class="antialiased text-cafe-ink dark:text-white">
+  <div id="toast">Message</div>
+
+  <button type="button" onclick="toggleTheme()" class="button-press fixed bottom-5 left-4 z-[1000] h-10 w-10 rounded-2xl border border-white/50 bg-white/85 text-brand-700 shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-[#17171c]/90 dark:text-brand-200 md:bottom-auto md:left-auto md:right-4 md:top-4 md:h-12 md:w-12">
+    <i id="theme-icon" class="fas fa-moon"></i>
+  </button>
+
+  <!-- TOKEN LIVE POPUP -->
+  <div id="token-live-popup" class="fixed inset-0 z-[9000] hidden items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-md" onclick="closeTokenPopup()"></div>
+    <div class="relative z-10 w-full max-w-md overflow-hidden rounded-[2rem] surface-card pop-in">
+      <div class="gold-gradient px-6 py-6 text-[#2b1a10]">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <div class="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/55 text-xl shadow-sm">🪙</div>
+            <h2 class="brand-heading text-4xl font-bold leading-none">Tokens are live</h2>
+            <p class="mt-2 text-sm font-semibold text-[#50331f]">Redeem signature dishes and exclusive chef picks using reward tokens.</p>
+          </div>
+          <div class="rounded-2xl bg-white/55 px-4 py-3 text-right shadow-sm">
+            <div class="text-[11px] font-black uppercase tracking-[0.2em] text-[#5b3a21]">Your Balance</div>
+            <div id="token-popup-balance" class="text-2xl font-black">0</div>
+          </div>
+        </div>
+      </div>
+      <div class="max-h-[360px] overflow-y-auto p-5" id="token-popup-items"></div>
+      <div class="border-t border-black/5 px-5 py-4 dark:border-white/10">
+        <button type="button" onclick="closeTokenPopupAndOrder()" class="button-press w-full rounded-2xl bg-brand-700 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-brand-900/20 hover:bg-brand-800">
+          <i class="fa-solid fa-bag-shopping mr-2"></i> Open Cart &amp; Redeem
+        </button>
+        <button type="button" onclick="closeTokenPopup()" class="button-press mt-2 w-full rounded-2xl border border-black/5 bg-black/5 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-black/10 dark:border-white/10 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10">
+          Maybe later
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ON TABLE ORDER MODAL -->
+  <div id="on-table-modal" class="fixed inset-0 z-[8500] hidden items-center justify-center p-3">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="closeOnTableModal()"></div>
+    <div class="relative z-10 flex max-h-[95vh] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] surface-card pop-in">
+      <div class="warm-gradient flex items-center justify-between px-5 py-4 text-white">
+        <div>
+          <p class="text-[11px] font-black uppercase tracking-[0.28em] text-white/70">Staff utility</p>
+          <h2 class="brand-heading text-3xl font-bold leading-none">Create On-Table Order</h2>
+        </div>
+        <button type="button" onclick="closeOnTableModal()" class="button-press h-10 w-10 rounded-2xl bg-white/10 hover:bg-white/20">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="grid flex-1 overflow-y-auto lg:grid-cols-[1.05fr,0.95fr]">
+        <div class="border-b border-black/5 p-5 dark:border-white/10 lg:border-b-0 lg:border-r">
+          <div class="mb-5">
+            <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60"><i class="fa-solid fa-chair mr-1"></i> Select Table</label>
+            <div id="table-number-grid" class="grid grid-cols-4 gap-3"></div>
+          </div>
+          <div>
+            <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60"><i class="fa-solid fa-magnifying-glass mr-1"></i> Search &amp; add items</label>
+            <div class="relative mb-3">
+              <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input id="ot-item-search" type="text" oninput="filterOTItems()" placeholder="Search menu items..." class="w-full rounded-2xl border border-black/5 bg-black/[0.03] py-3 pl-11 pr-4 text-sm font-semibold outline-none ring-0 placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+              <div id="ot-item-dropdown" class="absolute left-0 right-0 top-[calc(100%+10px)] z-40 hidden max-h-56 overflow-y-auto rounded-2xl surface-card"></div>
+            </div>
+            <div id="ot-items-list" class="space-y-3"></div>
+          </div>
+        </div>
+        <div class="bg-black/[0.02] p-5 dark:bg-white/[0.02]">
+          <div class="rounded-[1.5rem] border border-black/5 bg-white/70 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+            <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Cooking instructions</label>
+            <textarea id="ot-instructions" rows="3" placeholder="e.g. extra crispy, less spicy, no onion" class="w-full resize-none rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-medium outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white"></textarea>
+          </div>
+          <div class="mt-4 rounded-[1.5rem] border border-black/5 bg-white/80 p-4 dark:border-white/10 dark:bg-white/[0.03]">
+            <div class="mb-3 flex items-center justify-between">
+              <div>
+                <p class="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Bill summary</p>
+                <h3 class="text-lg font-black text-slate-900 dark:text-white">Current Ticket</h3>
+              </div>
+              <div class="rounded-2xl bg-brand-50 px-3 py-2 text-right dark:bg-brand-900/20">
+                <div class="text-[10px] font-black uppercase tracking-[0.18em] text-brand-700 dark:text-brand-200">Total</div>
+                <div id="ot-total" class="text-xl font-black text-brand-800 dark:text-brand-100">₹0</div>
+              </div>
+            </div>
+            <div id="ot-bill-items" class="space-y-2"></div>
+            <button type="button" onclick="placeOnTableOrder()" class="button-press mt-5 w-full rounded-2xl bg-brand-700 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-brand-900/20 hover:bg-brand-800">
+              <i class="fa-solid fa-check mr-2"></i> Place On-Table Order
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WELCOME VIEW -->
+  <div id="welcome-view" class="view hidden relative overflow-hidden bg-[#110f0d] text-white">
+    <div class="absolute inset-0 bg-gradient-to-br from-[#110f0d] via-[#1a140f] to-[#2a1a12]"></div>
+    <div class="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      <div class="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-[1.8rem] border border-white/10 bg-white/10 shadow-xl backdrop-blur-md">
+        <i class="fa-solid fa-cake-candles text-3xl text-brand-200"></i>
+      </div>
+      <h1 class="brand-heading text-5xl font-bold leading-none sm:text-6xl">Gurugram Baker's</h1>
+      <p class="mt-3 text-sm font-semibold uppercase tracking-[0.28em] text-white/65">Bakery • Cafe • Delivery</p>
+    </div>
+  </div>
+
+  <!-- LOGIN VIEW -->
+  <div id="login-view" class="view hidden relative overflow-hidden bg-cafe-cream dark:bg-[#0c0c10]">
+    <div class="absolute inset-0 bg-hero-wash"></div>
+    <div class="absolute left-[-5rem] top-[-4rem] h-56 w-56 rounded-full bg-brand-300/20 blur-3xl"></div>
+    <div class="absolute bottom-[-5rem] right-[-3rem] h-64 w-64 rounded-full bg-amber-300/15 blur-3xl"></div>
+    <div class="relative z-10 mx-auto grid min-h-[100svh] max-w-7xl items-center gap-5 px-4 py-6 sm:gap-8 sm:py-8 lg:min-h-screen lg:grid-cols-[1.15fr,0.85fr] lg:px-8 lg:py-10">
+      <div class="hidden lg:block">
+        <div class="mb-8 max-w-xl">
+          <h2 class="brand-heading text-6xl font-bold leading-none text-slate-900 dark:text-white">Fresh bakes, cheesy bites, sweet cravings — all ready for you.</h2>
+          <p class="mt-5 text-base font-medium leading-7 text-slate-600 dark:text-white/70">Order your favorite pizzas, burgers, cakes, sandwiches, noodles, and more in a beautiful cafe-style experience made for quick browsing and easy checkout.</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div class="surface-card card-lift overflow-hidden rounded-[1.75rem]">
+            <div class="relative h-56">
+              <img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=900&q=80" alt="Pizza" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-4 left-4 right-4 text-white">
+                <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-200">Signature</p>
+                <h3 class="brand-heading text-3xl font-bold">Wood-fired pizzas</h3>
+              </div>
+            </div>
+          </div>
+          <div class="surface-card card-lift overflow-hidden rounded-[1.75rem]">
+            <div class="relative h-56">
+              <img src="https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=900&q=80" alt="Cake" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-4 left-4 right-4 text-white">
+                <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-200">Celebrations</p>
+                <h3 class="brand-heading text-3xl font-bold">Artisan cakes</h3>
+              </div>
+            </div>
+          </div>
+          <div class="surface-card card-lift overflow-hidden rounded-[1.75rem]">
+            <div class="relative h-56">
+              <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80" alt="Burger with cola" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-4 left-4 right-4 text-white">
+                <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-200">Cafe Favorite</p>
+                <h3 class="brand-heading text-3xl font-bold">Loaded burgers</h3>
+              </div>
+            </div>
+          </div>
+          <div class="surface-card card-lift overflow-hidden rounded-[1.75rem]">
+            <div class="relative h-56">
+              <img src="https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=1200&q=80" alt="Veg Chowmein" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-4 left-4 right-4 text-white">
+                <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-200">Noodle Special</p>
+                <h3 class="brand-heading text-3xl font-bold">Veg Chowmein (Full)</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mx-auto w-full max-w-md sm:max-w-lg lg:max-w-md">
+        <div class="mb-5 lg:hidden">
+          <div class="mb-4 text-center">
+            <div class="mx-auto mb-3 flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-[1.1rem] warm-gradient text-white shadow-lg shadow-brand-900/20 sm:h-14 sm:w-14">
+              <i class="fa-solid fa-mug-hot text-lg sm:text-xl"></i>
+            </div>
+            <p class="text-[10px] font-black uppercase tracking-[0.26em] text-brand-700 dark:text-brand-200 sm:text-[11px]">Gurugram Baker's</p>
+            <h2 class="brand-heading mt-2 text-3xl font-bold leading-none text-slate-900 dark:text-white sm:text-4xl">Fresh bakes, cheesy bites, and sweet cravings.</h2>
+            <p class="mt-2 text-sm font-medium leading-6 text-slate-600 dark:text-white/70">Order pizzas, burgers, cakes, sandwiches, noodles, and more in a smooth cafe-style experience built for mobile.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="relative aspect-[1.12/0.92] min-h-[110px] overflow-hidden rounded-[1.35rem] surface-card">
+              <img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=900&q=80" alt="Pizza" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                <p class="text-[8px] font-black uppercase tracking-[0.2em] text-brand-200">Pizza</p>
+                <h3 class="brand-heading text-lg font-bold leading-none sm:text-xl">Fresh Slice</h3>
+              </div>
+            </div>
+            <div class="relative aspect-[1.12/0.92] min-h-[110px] overflow-hidden rounded-[1.35rem] surface-card">
+              <img src="https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=900&q=80" alt="Cake" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                <p class="text-[8px] font-black uppercase tracking-[0.2em] text-brand-200">Cake</p>
+                <h3 class="brand-heading text-lg font-bold leading-none sm:text-xl">Sweet Layers</h3>
+              </div>
+            </div>
+            <div class="relative aspect-[1.12/0.92] min-h-[110px] overflow-hidden rounded-[1.35rem] surface-card">
+              <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80" alt="Burger with cola" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                <p class="text-[8px] font-black uppercase tracking-[0.2em] text-brand-200">Burger</p>
+                <h3 class="brand-heading text-lg font-bold leading-none sm:text-xl">Loaded Bite</h3>
+              </div>
+            </div>
+            <div class="relative aspect-[1.12/0.92] min-h-[110px] overflow-hidden rounded-[1.35rem] surface-card">
+              <img src="https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=1200&q=80" alt="Veg Chowmein" class="h-full w-full object-cover">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+              <div class="absolute bottom-2.5 left-2.5 right-2.5 text-white">
+                <p class="text-[8px] font-black uppercase tracking-[0.2em] text-brand-200">Noodles</p>
+                <h3 class="brand-heading text-lg font-bold leading-none sm:text-xl">Veg Chowmein</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="glass-panel overflow-hidden rounded-[2rem] p-5 sm:p-8">
+          <div class="mb-7 flex items-center gap-4">
+            <div class="flex h-16 w-16 items-center justify-center rounded-[1.4rem] warm-gradient text-white shadow-lg">
+              <i class="fa-solid fa-mug-hot text-2xl"></i>
+            </div>
+            <div>
+              <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Welcome back</p>
+              <h1 class="brand-heading text-4xl font-bold leading-none text-slate-900 dark:text-white">Sign in</h1>
+            </div>
+          </div>
+
+          <div id="login-form" class="space-y-4">
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Name</label>
+              <div class="relative">
+                <i class="fa-solid fa-user absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="login-name" type="text" oninput="checkStaffLogin()" placeholder="Enter your name" class="w-full rounded-2xl border border-black/5 bg-white/80 py-3.5 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+              </div>
+            </div>
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Mobile number</label>
+              <div class="relative">
+                <i class="fa-solid fa-phone absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="login-phone" type="tel" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" placeholder="10-digit mobile number" class="w-full rounded-2xl border border-black/5 bg-white/80 py-3.5 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+              </div>
+            </div>
+            <div id="staff-password-container" class="hidden">
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Staff password</label>
+              <div class="relative">
+                <i class="fa-solid fa-shield-halved absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="login-password" type="password" placeholder="Enter staff password" class="w-full rounded-2xl border border-black/5 bg-white/80 py-3.5 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-3 pt-1">
+              <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-600 dark:text-white/70">
+                <input id="remember-me" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500">
+                <span>Remember me</span>
+              </label>
+              <div class="rounded-full border border-black/5 bg-white/60 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-white/60">Secure access</div>
+            </div>
+            <button type="button" onclick="handleLogin()" class="button-press mt-2 flex w-full items-center justify-center rounded-2xl warm-gradient px-4 py-4 text-sm font-extrabold uppercase tracking-[0.22em] text-white shadow-lg shadow-brand-900/20">
+              <span id="login-text">Login</span>
+              <div id="login-loader" class="loader ml-3 hidden"></div>
+            </button>
+          </div>
+
+          <div class="mt-6 grid grid-cols-3 gap-3">
+            <div class="rounded-2xl border border-black/5 bg-white/65 p-3 text-center dark:border-white/10 dark:bg-white/[0.03]">
+              <div class="text-lg font-black text-slate-900 dark:text-white">Fresh</div>
+              <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-white/60">Baked daily</div>
+            </div>
+            <div class="rounded-2xl border border-black/5 bg-white/65 p-3 text-center dark:border-white/10 dark:bg-white/[0.03]">
+              <div class="text-lg font-black text-slate-900 dark:text-white">Fast</div>
+              <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-white/60">Easy ordering</div>
+            </div>
+            <div class="rounded-2xl border border-black/5 bg-white/65 p-3 text-center dark:border-white/10 dark:bg-white/[0.03]">
+              <div class="text-lg font-black text-slate-900 dark:text-white">Rewards</div>
+              <div class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-white/60">Token perks</div>
+            </div>
+          </div>
+        </div>
+        <p class="mt-5 text-center text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 dark:text-white/40">© 2026 Gurugram Baker's. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMER VIEW -->
+  <div id="customer-view" class="view hidden pb-32">
+    <div class="warm-gradient py-2 text-center text-[11px] font-black uppercase tracking-[0.28em] text-white/90">
+      🎉 Free delivery above ₹350 • First order gets delivery free
+    </div>
+
+    <header class="sticky top-0 z-40 border-b border-black/5 bg-white/80 backdrop-blur-xl dark:border-white/10 dark:bg-[#121217]/78">
+      <div class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="min-w-0">
+            <div class="flex items-center gap-3">
+              <div class="flex h-12 w-12 items-center justify-center rounded-2xl warm-gradient text-white shadow-lg shadow-brand-900/15">
+                <i class="fa-solid fa-bread-slice text-lg"></i>
+              </div>
+              <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.24em] text-brand-700 dark:text-brand-200 sm:text-[11px]">Gurugram Baker's</p>
+                <h1 class="brand-heading truncate text-[1.7rem] font-bold leading-none text-slate-900 dark:text-white sm:text-3xl">Cafe Delivery</h1>
+              </div>
+            </div>
+            <p class="mt-2 hidden text-sm font-medium text-slate-500 dark:text-white/60 sm:block">Freshly baked, chef-crafted, and delivered with a premium cafe feel.</p>
+          </div>
+          <div class="hide-scrollbar -mx-1 flex w-full items-center justify-end gap-2 overflow-x-auto px-1 sm:mx-0 sm:w-auto sm:overflow-visible sm:pl-3">
+            <button id="active-order-btn" onclick="showOrderTracking()" class="hidden button-press shrink-0 items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] font-extrabold text-orange-700 shadow-sm dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-200">
+              <i class="fa-solid fa-motorcycle text-[11px]"></i><span>Track</span>
+            </button>
+            <button id="customer-token-btn" onclick="openTokenPopup()" class="hidden button-press shrink-0 items-center gap-1.5 rounded-full border border-yellow-300 bg-yellow-50 px-3 py-2 text-[11px] font-extrabold text-yellow-800 shadow-sm dark:border-yellow-500/20 dark:bg-yellow-500/10 dark:text-yellow-200">
+              <i class="fa-solid fa-coins text-[11px]"></i><span>Tokens</span>
+            </button>
+            <button type="button" onclick="openCart()" class="button-press relative shrink-0 flex h-10 w-10 items-center justify-center rounded-2xl border border-black/5 bg-black/[0.03] text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-white sm:h-11 sm:w-11">
+              <i class="fa-solid fa-bag-shopping text-sm"></i>
+              <span id="cart-badge-header" class="absolute -right-1 -top-1 hidden h-5 min-w-[20px] rounded-full bg-brand-700 px-1 text-[10px] font-black leading-5 text-white">0</span>
+            </button>
+            <button type="button" onclick="openProfile()" class="button-press shrink-0 flex h-10 w-10 items-center justify-center rounded-2xl border border-black/5 bg-black/[0.03] text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-white sm:h-11 sm:w-11">
+              <i class="fa-solid fa-user text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="search-input" type="text" oninput="handleSearch()" placeholder="Search pizzas, cakes, burgers..." class="w-full rounded-[1.35rem] border border-black/5 bg-black/[0.03] py-3.5 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+      <section class="mb-5">
+        <div class="hide-scrollbar flex gap-3 overflow-x-auto pb-2">
+          <div class="surface-card min-w-[235px] flex-none rounded-[1.45rem] p-3.5">
+            <div class="flex items-start gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700 dark:bg-brand-900/25 dark:text-brand-200"><i class="fa-solid fa-fire-burner text-sm"></i></div>
+              <div>
+                <p class="text-sm font-black text-slate-900 dark:text-white">Handcrafted &amp; oven-fresh</p>
+                <p class="mt-1 text-xs font-medium leading-5 text-slate-500 dark:text-white/60">Fresh bakes and comfort bites prepared daily.</p>
+              </div>
+            </div>
+          </div>
+          <div class="surface-card min-w-[235px] flex-none rounded-[1.45rem] p-3.5">
+            <div class="flex items-start gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-200"><i class="fa-solid fa-truck-fast text-sm"></i></div>
+              <div>
+                <p class="text-sm font-black text-slate-900 dark:text-white">Quick local delivery</p>
+                <p class="mt-1 text-xs font-medium leading-5 text-slate-500 dark:text-white/60">Cash / UPI on delivery with smart fee calculation.</p>
+              </div>
+            </div>
+          </div>
+          <div class="surface-card min-w-[235px] flex-none rounded-[1.45rem] p-3.5">
+            <div class="flex items-start gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-50 text-yellow-700 dark:bg-yellow-900/25 dark:text-yellow-200"><i class="fa-solid fa-coins text-sm"></i></div>
+              <div>
+                <p class="text-sm font-black text-slate-900 dark:text-white">Reward token perks</p>
+                <p class="mt-1 text-xs font-medium leading-5 text-slate-500 dark:text-white/60">Earn and redeem tokens whenever offers go live.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mb-8">
+        <div id="main-slider" class="relative h-[300px] overflow-hidden rounded-[2.2rem] shadow-glow sm:h-[360px] lg:h-[430px]">
+          <div class="hero-slide active cursor-pointer" onclick="goToSlideCategory('Pizza')">
+            <img src="https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=80" alt="Pizza banner" class="h-full w-full object-cover">
+            <div class="absolute inset-0 z-10 flex flex-col justify-end p-6 sm:p-8 lg:p-10">
+              <p class="mb-3 text-[11px] font-black uppercase tracking-[0.35em] text-brand-200">Pizza Collection</p>
+              <h2 class="brand-heading max-w-2xl text-5xl font-bold leading-none text-white sm:text-6xl">Flame-kissed slices, layered with indulgence.</h2>
+              <p class="mt-4 max-w-xl text-sm font-medium text-white/80 sm:text-base">Discover handcrafted pizza classics and cheese-loaded favorites with irresistible cafe flair.</p>
+              <div class="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-bold text-white backdrop-blur-md"><i class="fa-solid fa-arrow-right"></i> Explore Pizza</div>
+            </div>
+          </div>
+          <div class="hero-slide cursor-pointer" onclick="goToSlideCategory('Burgers')">
+            <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=80" alt="Burger banner" class="h-full w-full object-cover">
+            <div class="absolute inset-0 z-10 flex flex-col justify-end p-6 sm:p-8 lg:p-10">
+              <p class="mb-3 text-[11px] font-black uppercase tracking-[0.35em] text-brand-200">Burger Station</p>
+              <h2 class="brand-heading max-w-2xl text-5xl font-bold leading-none text-white sm:text-6xl">Juicy stacks, cafe-style comfort, all in one bite.</h2>
+              <p class="mt-4 max-w-xl text-sm font-medium text-white/80 sm:text-base">From crispy aloo tikki to signature supreme burgers — balanced, bold, and satisfying.</p>
+              <div class="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-bold text-white backdrop-blur-md"><i class="fa-solid fa-arrow-right"></i> Explore Burgers</div>
+            </div>
+          </div>
+          <div class="hero-slide cursor-pointer" onclick="goToSlideCategory('Cakes')">
+            <img src="https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1600&q=80" alt="Cake banner" class="h-full w-full object-cover">
+            <div class="absolute inset-0 z-10 flex flex-col justify-end p-6 sm:p-8 lg:p-10">
+              <p class="mb-3 text-[11px] font-black uppercase tracking-[0.35em] text-brand-200">Cake Atelier</p>
+              <h2 class="brand-heading max-w-2xl text-5xl font-bold leading-none text-white sm:text-6xl">Celebration cakes with artisanal richness.</h2>
+              <p class="mt-4 max-w-xl text-sm font-medium text-white/80 sm:text-base">Chocolate truffle, black forest, and premium baked centerpieces for every occasion.</p>
+              <div class="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-bold text-white backdrop-blur-md"><i class="fa-solid fa-arrow-right"></i> Explore Cakes</div>
+            </div>
+          </div>
+          <div class="hero-slide cursor-pointer" onclick="goToSlideCategory('Sandwiches')">
+            <img src="https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=1600&q=80" alt="Sandwich banner" class="h-full w-full object-cover">
+            <div class="absolute inset-0 z-10 flex flex-col justify-end p-6 sm:p-8 lg:p-10">
+              <p class="mb-3 text-[11px] font-black uppercase tracking-[0.35em] text-brand-200">Light &amp; Toasted</p>
+              <h2 class="brand-heading max-w-2xl text-5xl font-bold leading-none text-white sm:text-6xl">Fresh sandwiches made for cafe-hour cravings.</h2>
+              <p class="mt-4 max-w-xl text-sm font-medium text-white/80 sm:text-base">Grilled, cheesy, and perfectly balanced for quick bites or easy evening indulgence.</p>
+              <div class="mt-6 inline-flex w-fit items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-bold text-white backdrop-blur-md"><i class="fa-solid fa-arrow-right"></i> Explore Sandwiches</div>
+            </div>
+          </div>
+          <div class="absolute bottom-5 left-6 z-20 flex items-center gap-2" id="slider-dots">
+            <button class="slider-dot active"></button>
+            <button class="slider-dot"></button>
+            <button class="slider-dot"></button>
+            <button class="slider-dot"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="mb-8">
+        <div class="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.3em] text-brand-700 dark:text-brand-200">Curated Categories</p>
+            <h3 class="mt-1 text-2xl font-black text-slate-900 dark:text-white">Browse the menu</h3>
+          </div>
+          <div class="hidden rounded-full border border-black/5 bg-white/70 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-white/60 md:block">Tap a category or search instantly</div>
+        </div>
+        <div id="category-grid" class="hide-scrollbar flex gap-3 overflow-x-auto pb-2"></div>
+      </section>
+
+      <section class="pb-10">
+        <div class="mb-5 flex items-end justify-between gap-4">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.3em] text-brand-700 dark:text-brand-200">Menu Grid</p>
+            <h3 id="current-category-title" class="mt-1 text-3xl font-black text-slate-900 dark:text-white">All Items</h3>
+            <p id="menu-subtitle" class="mt-1 text-sm font-medium text-slate-500 dark:text-white/60">Explore our full handcrafted selection.</p>
+          </div>
+          <div class="hidden rounded-2xl border border-black/5 bg-white/70 px-4 py-3 text-right dark:border-white/10 dark:bg-white/5 lg:block">
+            <div class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-white/60">Refined Experience</div>
+            <div class="text-sm font-bold text-slate-900 dark:text-white">Modern food delivery layout</div>
+          </div>
+        </div>
+        <div id="menu-container" class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3"></div>
+      </section>
+    </main>
+
+    <footer class="mt-8 rounded-t-[2.6rem] bg-[#111113] text-white">
+      <div class="mx-auto max-w-7xl px-6 py-12">
+        <div class="grid gap-8 lg:grid-cols-[1.2fr,0.8fr] lg:items-center">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.3em] text-brand-200">Gurugram Baker's &amp; Cafe</p>
+            <h2 class="brand-heading mt-2 text-5xl font-bold leading-none">Where bakery warmth meets modern cafe indulgence.</h2>
+            <p class="mt-4 max-w-2xl text-sm font-medium leading-7 text-white/65">Shop No 5, Main Market, Gurugram • Gourmet pizzas, burgers, cakes, sandwiches, momos, noodles, chaap, starters and more.</p>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="rounded-[1.7rem] border border-white/10 bg-white/5 p-5">
+              <div class="text-[11px] font-black uppercase tracking-[0.22em] text-white/45">Contact</div>
+              <div class="mt-3 space-y-2 text-sm font-semibold text-white/75">
+                <div><i class="fa-solid fa-envelope mr-2 text-brand-200"></i> <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="036b666f6f6c43647671766471626e616268667170606265662d606c6e">[email&#160;protected]</a></div>
+                <div><i class="fa-solid fa-location-dot mr-2 text-brand-200"></i> Main Market, Gurugram</div>
+              </div>
+            </div>
+            <div class="rounded-[1.7rem] border border-white/10 bg-white/5 p-5">
+              <div class="text-[11px] font-black uppercase tracking-[0.22em] text-white/45">Social</div>
+              <div class="mt-3 flex gap-3">
+                <a href="#" class="button-press flex h-11 w-11 items-center justify-center rounded-2xl bg-white/8 text-white/75 hover:bg-white/14 hover:text-white"><i class="fab fa-instagram"></i></a>
+                <a href="#" class="button-press flex h-11 w-11 items-center justify-center rounded-2xl bg-white/8 text-white/75 hover:bg-white/14 hover:text-white"><i class="fab fa-facebook-f"></i></a>
+                <a href="#" class="button-press flex h-11 w-11 items-center justify-center rounded-2xl bg-white/8 text-white/75 hover:bg-white/14 hover:text-white"><i class="fab fa-x-twitter"></i></a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-10 border-t border-white/10 pt-6 text-center text-[11px] font-black uppercase tracking-[0.24em] text-white/35">© 2026 Gurugram Baker's. All rights reserved.</div>
+      </div>
+    </footer>
+
+    <div id="quick-cart-bar" class="quick-cart-bar fixed inset-x-3 bottom-4 z-40 hidden rounded-[1.7rem] px-4 py-3 text-white sm:left-auto sm:right-6 sm:w-[360px]">
+      <button type="button" onclick="openCart()" class="flex w-full items-center justify-between gap-4 text-left">
+        <div>
+          <div class="text-[11px] font-black uppercase tracking-[0.18em] text-white/55">Your cart</div>
+          <div class="mt-1 flex items-center gap-2 text-sm font-bold text-white">
+            <span id="quick-cart-count">0 items</span>
+            <span class="text-white/30">•</span>
+            <span id="quick-cart-total">₹0</span>
+          </div>
+        </div>
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-900/20">
+          <i class="fa-solid fa-arrow-right"></i>
+        </div>
+      </button>
+    </div>
+  </div>
+
+  <!-- CART MODAL -->
+  <div id="cart-modal" class="fixed inset-0 z-[7000] hidden">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="closeCart()"></div>
+    <div id="cart-panel" class="absolute inset-y-0 right-0 flex w-full max-w-xl translate-x-full flex-col bg-[#fcfaf6] shadow-2xl transition-transform duration-300 dark:bg-[#121216]">
+      <div class="border-b border-black/5 px-5 py-4 dark:border-white/10">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.26em] text-brand-700 dark:text-brand-200">Checkout</p>
+            <h2 class="text-2xl font-black text-slate-900 dark:text-white">Your Cart</h2>
+          </div>
+          <button type="button" onclick="closeCart()" class="button-press flex h-11 w-11 items-center justify-center rounded-2xl border border-black/5 bg-black/[0.03] text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-white">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-5 py-5">
+        <div class="mb-4 rounded-[1.6rem] border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 p-4 text-[#4c321d] dark:border-yellow-500/15 dark:from-yellow-500/10 dark:to-amber-500/5 dark:text-yellow-100">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="text-[11px] font-black uppercase tracking-[0.22em] text-yellow-700/80 dark:text-yellow-200/70">Token Wallet</div>
+              <div class="mt-1 text-lg font-black">Balance: <span id="cart-token-balance">0</span> tokens</div>
+            </div>
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/60 text-xl shadow-sm dark:bg-white/10">🪙</div>
+          </div>
+        </div>
+
+        <div id="cart-items-container" class="space-y-3"></div>
+
+        <div id="token-redemption-container" class="mt-5"></div>
+
+        <div class="mt-5 rounded-[1.6rem] surface-card p-4">
+          <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Coupon Code</label>
+          <div class="flex gap-2">
+            <input id="coupon-input" type="text" placeholder="Enter coupon code" class="min-w-0 flex-1 rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-bold uppercase outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+            <button type="button" onclick="applyCoupon()" class="button-press rounded-2xl bg-brand-800 px-4 py-3 text-sm font-extrabold text-white hover:bg-brand-900">Apply</button>
+          </div>
+          <p id="coupon-message" class="mt-2 hidden text-xs font-bold"></p>
+        </div>
+
+        <div class="mt-5 rounded-[1.8rem] surface-card p-5">
+          <div class="mb-4 flex items-center justify-between">
+            <div>
+              <div class="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Payment Summary</div>
+              <h3 class="text-lg font-black text-slate-900 dark:text-white">Order totals</h3>
+            </div>
+            <div class="rounded-2xl bg-brand-50 px-3 py-2 text-right dark:bg-brand-900/20">
+              <div class="text-[10px] font-black uppercase tracking-[0.18em] text-brand-700 dark:text-brand-200">Earn</div>
+              <div class="text-base font-black text-brand-800 dark:text-brand-100"><span id="cart-tokens-earned">0</span> tokens</div>
+            </div>
+          </div>
+          <div class="space-y-3 text-sm font-semibold text-slate-600 dark:text-white/65">
+            <div class="flex items-center justify-between"><span>Subtotal</span><span id="cart-subtotal" class="font-black text-slate-900 dark:text-white">₹0</span></div>
+            <div id="cart-discount-row" class="hidden items-center justify-between text-emerald-600 dark:text-emerald-300"><span>Coupon Discount</span><span id="cart-discount" class="font-black">-₹0</span></div>
+            <div class="flex items-center justify-between"><span>Delivery &amp; Packaging</span><span id="cart-delivery" class="font-black text-slate-900 dark:text-white">₹0</span></div>
+          </div>
+          <div class="my-4 h-px bg-black/5 dark:bg-white/10"></div>
+          <div class="flex items-end justify-between">
+            <div>
+              <div class="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-white/60">Final Total</div>
+              <div class="text-sm font-medium text-slate-500 dark:text-white/55">Cash / UPI on Delivery</div>
+            </div>
+            <div id="cart-final-total" class="text-3xl font-black text-slate-900 dark:text-white">₹0</div>
+          </div>
+        </div>
+
+        <div class="mt-5 rounded-[1.8rem] surface-card p-4">
+          <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Cooking Instructions</label>
+          <textarea id="cooking-instructions" rows="3" placeholder="e.g. extra cheese, less spicy, no onion" class="w-full resize-none rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-medium outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white"></textarea>
+        </div>
+
+        <div class="mt-5 rounded-[1.8rem] surface-card p-4">
+          <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Delivery Address</label>
+          <textarea id="delivery-location" rows="3" placeholder="House / Flat No, Street, Landmark" class="w-full resize-none rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-medium outline-none placeholder:text-slate-400 focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white"></textarea>
+        </div>
+      </div>
+
+      <div class="border-t border-black/5 px-5 py-4 dark:border-white/10">
+        <div class="mb-3 rounded-[1.4rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 dark:border-emerald-500/15 dark:bg-emerald-500/10 dark:text-emerald-200">
+          <i class="fa-solid fa-circle-check mr-2"></i> Payment mode: Cash / UPI on Delivery
+        </div>
+        <button type="button" onclick="handlePlaceOrder()" class="button-press flex w-full items-center justify-center rounded-[1.4rem] warm-gradient px-4 py-4 text-sm font-extrabold uppercase tracking-[0.22em] text-white shadow-lg shadow-brand-900/20">
+          <span id="place-order-text">Place Order</span>
+          <div id="place-order-loader" class="loader ml-3 hidden"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFILE MODAL -->
+  <div id="profile-modal" class="fixed inset-0 z-[7100] hidden items-end justify-center p-0 sm:items-center sm:p-4">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="closeProfile()"></div>
+    <div class="relative z-10 w-full max-w-md overflow-hidden rounded-t-[2rem] surface-card pop-in sm:rounded-[2rem]">
+      <div class="warm-gradient relative px-6 py-6 text-white">
+        <button type="button" onclick="closeProfile()" class="button-press absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20"><i class="fa-solid fa-xmark"></i></button>
+        <div class="flex items-center gap-4">
+          <div class="flex h-20 w-20 items-center justify-center rounded-[1.8rem] border border-white/20 bg-white/10 text-3xl font-black shadow-lg backdrop-blur-md" id="profile-initial">U</div>
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.24em] text-white/70">Customer Profile</p>
+            <h2 id="profile-name" class="brand-heading text-4xl font-bold leading-none">Name</h2>
+            <p id="profile-phone" class="mt-2 text-sm font-semibold text-white/75">Phone</p>
+          </div>
+        </div>
+      </div>
+      <div class="-mt-4 px-5">
+        <div class="rounded-[1.6rem] border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 p-4 shadow-lg dark:border-yellow-500/15 dark:from-yellow-500/10 dark:to-amber-500/5">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="text-[11px] font-black uppercase tracking-[0.2em] text-yellow-700/80 dark:text-yellow-200/70">Reward Tokens</div>
+              <div class="mt-1 text-2xl font-black text-yellow-800 dark:text-yellow-100"><span id="profile-tokens">0</span> pts</div>
+            </div>
+            <div class="rounded-2xl bg-white/70 px-4 py-3 text-sm font-black text-yellow-800 shadow-sm dark:bg-white/10 dark:text-yellow-100">Redeem for offers</div>
+          </div>
+        </div>
+      </div>
+      <div class="space-y-4 px-5 pb-5 pt-5">
+        <div>
+          <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Display Name</label>
+          <input id="edit-name" type="text" class="w-full rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-semibold outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white" placeholder="Your name">
+        </div>
+        <div>
+          <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Mobile Number</label>
+          <input id="edit-phone" type="tel" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" class="w-full rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-semibold outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white" placeholder="10-digit number">
+        </div>
+        <div>
+          <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Delivery Address</label>
+          <textarea id="edit-address" rows="3" class="w-full resize-none rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-medium outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white" placeholder="House / Flat No, Street, Landmark"></textarea>
+        </div>
+        <button type="button" onclick="saveProfile()" class="button-press w-full rounded-2xl bg-brand-700 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-brand-900/20 hover:bg-brand-800"><i class="fa-solid fa-floppy-disk mr-2"></i> Save Changes</button>
+        <button type="button" onclick="handleLogout()" class="button-press w-full rounded-2xl border border-black/5 bg-black/[0.04] px-4 py-3.5 text-sm font-extrabold text-slate-700 hover:bg-black/[0.07] dark:border-white/10 dark:bg-white/5 dark:text-white"><i class="fa-solid fa-right-from-bracket mr-2"></i> Sign Out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDER TRACKING MODAL -->
+  <div id="tracking-modal" class="fixed inset-0 z-[7200] hidden items-end justify-center p-0 sm:items-center sm:p-4">
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-md" onclick="closeTracking()"></div>
+    <div class="relative z-10 w-full max-w-lg overflow-hidden rounded-t-[2rem] surface-card pop-in sm:rounded-[2rem]">
+      <div class="warm-gradient relative px-6 py-6 text-white">
+        <button type="button" onclick="closeTracking()" class="button-press absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20"><i class="fa-solid fa-xmark"></i></button>
+        <div class="flex items-center gap-4">
+          <div class="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-white text-emerald-600 shadow-lg">
+            <i class="fa-solid fa-box-open text-2xl"></i>
+          </div>
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.24em] text-white/70">Live Tracking</p>
+            <h2 class="brand-heading text-4xl font-bold leading-none">Your order is moving</h2>
+            <div id="tracking-order-id" class="mt-2 inline-flex rounded-full bg-white/12 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-white/90">#ORD000000</div>
+          </div>
+        </div>
+      </div>
+      <div class="p-5">
+        <div id="tracking-timeline" class="rounded-[1.7rem] border border-black/5 bg-white/75 p-5 dark:border-white/10 dark:bg-white/[0.03]"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STAFF VIEW -->
+  <div id="staff-view" class="view hidden bg-[#f5f1eb] dark:bg-[#0b0b0f]">
+    <header class="sticky top-0 z-40 border-b border-white/10 bg-[#121216]/95 text-white backdrop-blur-xl">
+      <div class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex items-center gap-4">
+            <div class="flex h-14 w-14 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-brand-500 to-brand-700 text-xl font-black text-[#20140d] shadow-lg shadow-brand-900/20">S</div>
+            <div>
+              <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-200">Gurugram Baker's</p>
+              <h1 class="text-2xl font-black tracking-tight">Staff Portal</h1>
+              <p class="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300"><i class="fa-solid fa-circle mr-1 text-[8px]"></i>Operations online</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right sm:block">
+              <div class="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Dashboard Type</div>
+              <div class="text-sm font-bold text-white/90">Professional SaaS-style control</div>
+            </div>
+            <button type="button" onclick="handleLogout()" class="button-press flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/85 hover:bg-white/10"><i class="fa-solid fa-right-from-bracket"></i></button>
+          </div>
+        </div>
+
+        <div class="hide-scrollbar mt-4 flex gap-3 overflow-x-auto pb-1">
+          <button onclick="switchStaffTab('PENDING')" id="stab-PENDING" class="tab-btn active"><i class="fa-solid fa-clock"></i> Active Orders</button>
+          <button onclick="switchStaffTab('COMPLETED')" id="stab-COMPLETED" class="tab-btn"><i class="fa-solid fa-check-double"></i> Completed</button>
+          <button onclick="switchStaffTab('COUPONS')" id="stab-COUPONS" class="tab-btn"><i class="fa-solid fa-ticket"></i> Coupons</button>
+          <button onclick="switchStaffTab('TOKENS')" id="stab-TOKENS" class="tab-btn"><i class="fa-solid fa-coins"></i> Token System</button>
+          <button onclick="switchStaffTab('REVENUE')" id="stab-REVENUE" class="tab-btn"><i class="fa-solid fa-chart-simple"></i> Revenue</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div id="staff-summary-strip" class="hidden"></div>
+
+      <div id="staff-orders-area" class="hidden">
+        <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Workflow</p>
+              <div class="mt-1 flex items-end gap-3">
+                <span id="staff-order-count" class="text-5xl font-black text-slate-900 dark:text-white">0</span>
+                <span id="staff-tab-label" class="pb-2 text-base font-bold text-slate-500 dark:text-white/60">Active Orders</span>
+              </div>
+            </div>
+            <button onclick="openOnTableModal()" class="button-press rounded-2xl bg-brand-700 px-4 py-3 text-sm font-extrabold text-white shadow-lg shadow-brand-900/15 hover:bg-brand-800"><i class="fa-solid fa-plus mr-2"></i>Create On-Table Order</button>
+          </div>
+          <div id="order-type-filters" class="hide-scrollbar flex gap-3 overflow-x-auto pb-1">
+            <button class="filter-chip active" id="ftab-all" onclick="setOrderFilter('all')">All Orders</button>
+            <button class="filter-chip" id="ftab-delivery" onclick="setOrderFilter('delivery')">Home Delivery <span id="ftab-delivery-count" class="rounded-full bg-black/5 px-2 py-1 text-[10px] font-black dark:bg-white/10">0</span></button>
+            <button class="filter-chip" id="ftab-table" onclick="setOrderFilter('table')">On Table <span id="ftab-table-count" class="rounded-full bg-black/5 px-2 py-1 text-[10px] font-black dark:bg-white/10">0</span></button>
+          </div>
+        </div>
+        <div id="staff-orders-container" class="grid grid-cols-1 gap-5 xl:grid-cols-2"></div>
+      </div>
+
+      <div id="staff-completed-area" class="hidden">
+        <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Delivered History</p>
+            <div class="mt-1 flex items-end gap-3">
+              <span id="comp-order-count" class="text-5xl font-black text-slate-900 dark:text-white">0</span>
+              <span class="pb-2 text-base font-bold text-slate-500 dark:text-white/60">Completed Orders</span>
+            </div>
+          </div>
+          <div class="hide-scrollbar flex gap-3 overflow-x-auto pb-1">
+            <button class="date-btn active" id="comp-today" onclick="setCompFilter('today')">Today</button>
+            <button class="date-btn" id="comp-week" onclick="setCompFilter('week')">This Week</button>
+            <button class="date-btn" id="comp-month" onclick="setCompFilter('month')">This Month</button>
+            <button class="date-btn" id="comp-filter-btn" onclick="toggleCompCalendar()"><i class="fa-solid fa-calendar-days mr-2"></i>Custom Range</button>
+          </div>
+        </div>
+
+        <div id="comp-calendar-box" class="mb-5 hidden rounded-[1.8rem] surface-card p-5">
+          <div class="grid gap-5 lg:grid-cols-2">
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Start Date</label>
+              <div id="comp-start-cal"></div>
+            </div>
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">End Date</label>
+              <div id="comp-end-cal"></div>
+            </div>
+          </div>
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div class="text-sm font-bold text-slate-600 dark:text-white/65">From: <span id="comp-start-display" class="text-slate-900 dark:text-white">—</span></div>
+            <div class="text-sm font-bold text-slate-600 dark:text-white/65">To: <span id="comp-end-display" class="text-slate-900 dark:text-white">—</span></div>
+            <button onclick="applyCompFilter()" class="button-press sm:ml-auto rounded-2xl bg-brand-800 px-4 py-3 text-sm font-extrabold text-white hover:bg-brand-900">Apply Filter</button>
+          </div>
+        </div>
+
+        <div id="completed-orders-container" class="grid grid-cols-1 gap-5 xl:grid-cols-2"></div>
+      </div>
+
+      <div id="staff-coupons-area" class="hidden">
+        <div class="mb-6 rounded-[2rem] surface-card p-6">
+          <div class="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Discount Engine</p>
+              <h2 class="text-2xl font-black text-slate-900 dark:text-white">Create Coupon</h2>
+            </div>
+            <div class="hidden rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-right dark:border-white/10 dark:bg-white/5 md:block">
+              <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Usage</div>
+              <div class="text-sm font-bold text-slate-900 dark:text-white">Flat amount discounts</div>
+            </div>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2">
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Coupon Code</label>
+              <input id="cpn-code" type="text" placeholder="e.g. SAVE20" class="w-full rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-black uppercase outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+            </div>
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Discount Amount (₹)</label>
+              <input id="cpn-val" type="number" placeholder="e.g. 50" class="w-full rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-bold outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+            </div>
+          </div>
+          <button onclick="createCoupon()" class="button-press mt-5 rounded-2xl bg-brand-800 px-5 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-brand-900/15 hover:bg-brand-900"><i class="fa-solid fa-ticket mr-2"></i>Create &amp; Activate Coupon</button>
+        </div>
+        <div class="mb-3 flex items-center justify-between gap-4">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Active Campaigns</p>
+            <h3 class="text-xl font-black text-slate-900 dark:text-white">Active Coupons</h3>
+          </div>
+        </div>
+        <div id="active-coupons-container" class="grid grid-cols-1 gap-4 lg:grid-cols-2"></div>
+      </div>
+
+      <div id="staff-tokens-area" class="hidden">
+        <div class="mb-6 grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
+          <div class="rounded-[2rem] surface-card p-6">
+            <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Rewards Control</p>
+                <h2 class="text-2xl font-black text-slate-900 dark:text-white">Token System</h2>
+              </div>
+              <div class="flex items-center gap-3">
+                <span id="token-status-label" class="text-sm font-bold text-slate-500 dark:text-white/65">Status: OFF</span>
+                <button id="token-toggle-btn" onclick="toggleTokenSystem()" class="button-press rounded-2xl bg-slate-900 px-4 py-3 text-sm font-extrabold text-white dark:bg-white dark:text-slate-900">Turn ON</button>
+              </div>
+            </div>
+
+            <div class="rounded-[1.6rem] border border-black/5 bg-black/[0.03] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+              <div class="mb-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Earn tokens every ₹</label>
+                  <input id="tok-earn-amount" type="number" placeholder="50" class="w-full rounded-2xl border border-black/5 bg-white/75 px-4 py-3 text-sm font-bold outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+                </div>
+                <div>
+                  <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Reward tokens</label>
+                  <input id="tok-earn-reward" type="number" placeholder="2" class="w-full rounded-2xl border border-black/5 bg-white/75 px-4 py-3 text-sm font-bold outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+                </div>
+              </div>
+              <button onclick="saveTokenRewardRules()" class="button-press rounded-2xl bg-brand-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-brand-800"><i class="fa-solid fa-sliders mr-2"></i>Save Reward Rules</button>
+            </div>
+          </div>
+
+          <div class="rounded-[2rem] surface-card p-6">
+            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Exclusive Dish Setup</p>
+            <h3 class="mt-1 text-xl font-black text-slate-900 dark:text-white">Add Redeemable Token Item</h3>
+            <div class="mt-5">
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Search &amp; Select Menu Item</label>
+              <div class="relative">
+                <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input id="tok-item-search" type="text" oninput="filterTokItems()" placeholder="Search menu items..." class="w-full rounded-2xl border border-black/5 bg-black/[0.03] py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+                <div id="tok-item-dropdown" class="absolute left-0 right-0 top-[calc(100%+10px)] z-40 hidden max-h-56 overflow-y-auto rounded-2xl surface-card"></div>
+              </div>
+              <div id="tok-selected-item-preview" class="mt-3 hidden rounded-[1.4rem] border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 p-4 dark:border-yellow-500/15 dark:from-yellow-500/10 dark:to-amber-500/5">
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <div id="tok-selected-name" class="font-black text-slate-900 dark:text-white"></div>
+                    <div id="tok-selected-price" class="mt-1 text-sm font-bold text-yellow-800 dark:text-yellow-100"></div>
+                  </div>
+                  <button onclick="clearTokSelectedItem()" class="button-press flex h-10 w-10 items-center justify-center rounded-2xl bg-white/70 text-slate-500 hover:text-red-500 dark:bg-white/10 dark:text-white/70"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4">
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Tokens Required</label>
+              <input id="tok-tokens" type="number" placeholder="e.g. 10" class="w-full rounded-2xl border border-black/5 bg-black/[0.03] px-4 py-3 text-sm font-bold outline-none focus:border-brand-500 dark:border-white/10 dark:bg-white/5 dark:text-white">
+            </div>
+            <button onclick="addTokenItem()" class="button-press mt-5 rounded-2xl bg-yellow-500 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-yellow-500/15 hover:bg-yellow-600"><i class="fa-solid fa-coins mr-2"></i>Add Token Item</button>
+          </div>
+        </div>
+        <div class="mb-3 flex items-center justify-between gap-4">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Redeemable Catalog</p>
+            <h3 class="text-xl font-black text-slate-900 dark:text-white">Token Items</h3>
+          </div>
+        </div>
+        <div id="token-items-container" class="grid grid-cols-1 gap-4 lg:grid-cols-2"></div>
+      </div>
+
+      <div id="staff-revenue-area" class="hidden">
+        <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p class="text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Revenue Intelligence</p>
+            <h2 class="text-3xl font-black text-slate-900 dark:text-white">Sales Dashboard</h2>
+          </div>
+          <div class="hide-scrollbar flex gap-3 overflow-x-auto pb-1">
+            <button class="date-btn active" id="rev-today" onclick="setRevFilter('today')">Today</button>
+            <button class="date-btn" id="rev-week" onclick="setRevFilter('week')">This Week</button>
+            <button class="date-btn" id="rev-month" onclick="setRevFilter('month')">This Month</button>
+            <button class="date-btn" id="rev-filter" onclick="toggleRevCalendar()"><i class="fa-solid fa-calendar-days mr-2"></i>Custom Range</button>
+          </div>
+        </div>
+
+        <div id="rev-calendar-box" class="mb-5 hidden rounded-[1.8rem] surface-card p-5">
+          <div class="grid gap-5 lg:grid-cols-2">
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Start Date</label>
+              <div id="rev-start-cal"></div>
+            </div>
+            <div>
+              <label class="mb-2 block text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">End Date</label>
+              <div id="rev-end-cal"></div>
+            </div>
+          </div>
+          <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div class="text-sm font-bold text-slate-600 dark:text-white/65">From: <span id="rev-start-display" class="text-slate-900 dark:text-white">—</span></div>
+            <div class="text-sm font-bold text-slate-600 dark:text-white/65">To: <span id="rev-end-display" class="text-slate-900 dark:text-white">—</span></div>
+            <button onclick="applyCustomRevFilter()" class="button-press sm:ml-auto rounded-2xl bg-brand-800 px-4 py-3 text-sm font-extrabold text-white hover:bg-brand-900">Apply Filter</button>
+          </div>
+        </div>
+
+        <div class="hide-scrollbar mb-5 flex gap-3 overflow-x-auto pb-1">
+          <button class="filter-chip active" id="rev-ftab-all" onclick="setRevTypeFilter('all')">All Orders</button>
+          <button class="filter-chip" id="rev-ftab-delivery" onclick="setRevTypeFilter('delivery')">Home Delivery</button>
+          <button class="filter-chip" id="rev-ftab-table" onclick="setRevTypeFilter('table')">On Table</button>
+        </div>
+
+        <div id="rev-summary-card" class="mb-5 rounded-[2rem] surface-card p-5"></div>
+        <div>
+          <p class="mb-3 text-[11px] font-black uppercase tracking-[0.28em] text-brand-700 dark:text-brand-200">Breakdown</p>
+          <div id="rev-orders-list" class="space-y-3"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+    // ====== THEME ======
+    function applyTheme(theme) {
+      const html = document.documentElement;
+      const icon = document.getElementById('theme-icon');
+      if (theme === 'dark') {
+        html.classList.add('dark');
+        if (icon) {
+          icon.classList.remove('fa-moon');
+          icon.classList.add('fa-sun');
+        }
+        localStorage.setItem('gcafe_theme', 'dark');
+      } else {
+        html.classList.remove('dark');
+        if (icon) {
+          icon.classList.remove('fa-sun');
+          icon.classList.add('fa-moon');
+        }
+        localStorage.setItem('gcafe_theme', 'light');
+      }
+    }
+    function toggleTheme() {
+      applyTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
+    }
+    (function() {
+      const savedTheme = localStorage.getItem('gcafe_theme') || 'light';
+      if (savedTheme === 'dark') document.documentElement.classList.add('dark');
+    })();
+
+    // ====== DATA ======
+    const menuData = [
+      {id:'p1',category:'Pizza',name:'Classic Margherita',price:150,image:'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Classic delight with 100% real mozzarella cheese.'},
+      {id:'p2',category:'Pizza',name:'Double Cheese Margherita',price:180,image:'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Loaded with extra cheese for serious cheese lovers.'},
+      {id:'p3',category:'Pizza',name:'Tandoori Paneer Pizza',price:200,image:'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Spiced paneer, onions, capsicum, and smoky tandoori flavors.'},
+      {id:'b1',category:'Burgers',name:'Aloo Tikki Burger',price:40,image:'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Crispy potato patty with fresh veggies and soft buns.'},
+      {id:'b2',category:'Burgers',name:'Veg Cheese Burger',price:70,image:'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Loaded with veggies, sauces, and melted cheese goodness.'},
+      {id:'b3',category:'Burgers',name:'Gurugram Supreme Burger',price:100,image:'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Our signature hearty burger with premium layered fillings.'},
+      {id:'s1',category:'Sandwiches',name:'Veg Cheese Sandwich',price:70,image:'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Grilled to perfection with cheese and crunchy vegetables.'},
+      {id:'s2',category:'Sandwiches',name:'Tandoori Paneer Sandwich',price:90,image:'https://images.unsplash.com/photo-1553909489-cd47ce7ee230?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Spicy tandoori paneer layered in a grilled sandwich.'},
+      {id:'m1',category:'Momos',name:'Steam Veg Momos (10 Pcs)',price:70,image:'https://images.unsplash.com/photo-1625220194771-7ebdea0b70b9?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Soft, juicy, classic veg dumplings served warm.'},
+      {id:'m2',category:'Momos',name:'Fried Paneer Momos (10 Pcs)',price:100,image:'https://images.unsplash.com/photo-1645607067894-3d9223ea4dff?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Crispy fried momos with delicious paneer filling.'},
+      {id:'c1',category:'Chowmein',name:'Veg Chowmein (Full)',price:70,image:'https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Street-style veg noodles tossed in bold Indo-Chinese flavors.'},
+      {id:'c2',category:'Chowmein',name:'Hakka Noodle (Full)',price:80,image:'https://images.unsplash.com/photo-1552611052-33e04de081de?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Classic Hakka noodles with vegetables and smoky wok finish.'},
+      {id:'ch1',category:'Chaap',name:'Malai Chaap (Full)',price:170,image:'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Creamy and rich soya chaap with indulgent flavor.'},
+      {id:'ch2',category:'Chaap',name:'Afgani Chaap (Full)',price:160,image:'https://images.unsplash.com/photo-1628294895950-9805252327bc?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Spicy tandoori-style soya chaap with deep smoky notes.'},
+      {id:'st1',category:'Starters',name:'French Fries',price:100,image:'https://images.unsplash.com/photo-1576107232684-1279f3908594?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Crispy golden fries finished with perfect seasoning.'},
+      {id:'st2',category:'Starters',name:'Chilly Paneer',price:160,image:'https://images.unsplash.com/photo-1599487405705-8eb0c2a29c15?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Paneer tossed in spicy, glossy Indo-Chinese sauce.'},
+      {id:'ck1',category:'Cakes',name:'Black Forest Cake',price:400,image:'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Rich chocolate sponge layered with cream and cherries.'},
+      {id:'ck2',category:'Cakes',name:'Chocolate Truffle Cake',price:500,image:'https://images.unsplash.com/photo-1588195538326-c5b1e9f6e556?auto=format&fit=crop&w=1200&q=80',veg:true,desc:'Dense, moist chocolate cake with truffle-style icing.'}
+    ];
+
+    const categoryMeta = {
+      All: { icon: 'fa-layer-group', tone: 'from-slate-700 to-slate-900' },
+      Pizza: { icon: 'fa-pizza-slice', tone: 'from-red-500 to-orange-500' },
+      Burgers: { icon: 'fa-burger', tone: 'from-yellow-500 to-orange-500' },
+      Sandwiches: { icon: 'fa-bread-slice', tone: 'from-amber-500 to-yellow-500' },
+      Momos: { icon: 'fa-bowl-food', tone: 'from-sky-500 to-cyan-500' },
+      Chowmein: { icon: 'fa-bowl-rice', tone: 'from-emerald-500 to-lime-500' },
+      Chaap: { icon: 'fa-utensils', tone: 'from-fuchsia-500 to-rose-500' },
+      Starters: { icon: 'fa-fire-flame-curved', tone: 'from-orange-500 to-red-500' },
+      Cakes: { icon: 'fa-cake-candles', tone: 'from-pink-500 to-fuchsia-500' }
+    };
+
+    const STATUSES = {
+      RECEIVED: {label:'Order Received',icon:'fa-file-invoice',color:'text-brand-700 dark:text-brand-200',bg:'bg-brand-50 dark:bg-brand-900/20',text:'Your order has been accepted by the cafe.'},
+      PREPARING: {label:'Started Making',icon:'fa-fire-burner',color:'text-orange-600 dark:text-orange-300',bg:'bg-orange-50 dark:bg-orange-900/20',text:'Our kitchen has started preparing your meal.'},
+      DISPATCHED: {label:'Left the Resto',icon:'fa-motorcycle',color:'text-violet-600 dark:text-violet-300',bg:'bg-violet-50 dark:bg-violet-900/20',text:'The order has left the cafe and is on its way.'},
+      DELIVERED: {label:'Delivered',icon:'fa-house',color:'text-emerald-600 dark:text-emerald-300',bg:'bg-emerald-50 dark:bg-emerald-900/20',text:'Delivered successfully. Enjoy your meal!'}
+    };
+    const STATUS_ORDER = ['RECEIVED','PREPARING','DISPATCHED','DELIVERED'];
+    const ALL_TABS = ['PENDING','COMPLETED','COUPONS','TOKENS','REVENUE'];
+
+    // ====== STATE ======
+    const USER_KEY = 'gcafe_user';
+    if (localStorage.getItem(USER_KEY) && !localStorage.getItem('gcafe_remember_login')) {
+      localStorage.setItem('gcafe_remember_login', '1');
+    }
+
+    function loadCurrentUser() {
+      try {
+        return JSON.parse(localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY) || 'null');
+      } catch (e) {
+        return null;
+      }
+    }
+    function isRememberedLogin() {
+      return localStorage.getItem('gcafe_remember_login') === '1';
+    }
+    function persistCurrentUser() {
+      if (!currentUser) {
+        localStorage.removeItem(USER_KEY);
+        sessionStorage.removeItem(USER_KEY);
+        return;
+      }
+      if (isRememberedLogin()) {
+        localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+        sessionStorage.removeItem(USER_KEY);
+      } else {
+        sessionStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+        localStorage.removeItem(USER_KEY);
+      }
+    }
+
+    let currentUser = loadCurrentUser();
+    let cart = JSON.parse(localStorage.getItem('gcafe_cart') || '[]');
+    let redeemedTokenItems = JSON.parse(sessionStorage.getItem('gcafe_redeemed_cart') || '[]');
+    let activeCategory = 'All';
+    let staffTab = 'PENDING';
+    let appliedCoupon = null;
+    let orderFilter = 'all';
+    let lastOrderCount = 0;
+    let revFilter = 'today', revTypeFilter = 'all', revStartDate = null, revEndDate = null;
+    let revCalYear = new Date().getFullYear(), revCalMonth = new Date().getMonth();
+    let compFilter = 'today', compStartDate = null, compEndDate = null;
+    let compCalYear = new Date().getFullYear(), compCalMonth = new Date().getMonth();
+    let otItems = [], otTableNumber = null;
+    let tokSelectedItem = null;
+    let welcomeTimer = null;
+    let sliderIndex = 0;
+
+    // ====== UTILS ======
+    // Data now lives in Firebase Realtime Database (cross-device).
+    // fbGetXxx() / fbSaveXxx() are defined in the module <script> above.
+    // These wrappers keep the rest of the code unchanged.
+    const getOrders      = () => (window.fbGetOrders      ? window.fbGetOrders()      : JSON.parse(localStorage.getItem('gcafe_orders')       || '[]'));
+    const getCoupons     = () => (window.fbGetCoupons     ? window.fbGetCoupons()     : JSON.parse(localStorage.getItem('gcafe_coupons')      || '[]'));
+    const getTokenConfig = () => (window.fbGetTokenConfig ? window.fbGetTokenConfig() : JSON.parse(localStorage.getItem('gcafe_tokens_config') || '{"active":false,"items":[],"rewardDivisor":50,"rewardTokens":2}'));
+
+    const saveOrders = (orders) => {
+      if (window.fbSaveOrders) {
+        window.fbSaveOrders(orders); // async — Firebase does the sync
+      } else {
+        localStorage.setItem('gcafe_orders', JSON.stringify(orders));
+        window.dispatchEvent(new Event('ordersUpdated'));
+      }
+    };
+    const saveCoupons = (coupons) => {
+      if (window.fbSaveCoupons) window.fbSaveCoupons(coupons);
+      else localStorage.setItem('gcafe_coupons', JSON.stringify(coupons));
+    };
+    const saveTokenConfig = (config) => {
+      if (window.fbSaveTokenConfig) window.fbSaveTokenConfig(config);
+      else localStorage.setItem('gcafe_tokens_config', JSON.stringify(config));
+    };
+    const fmt = (amount) => '₹' + Number(amount || 0).toLocaleString('en-IN');
+
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.style.background = isError ? 'rgba(185, 28, 28, 0.96)' : 'rgba(19, 19, 24, 0.96)';
+      toast.innerHTML = `<i class="fas ${isError ? 'fa-circle-exclamation' : 'fa-bell'} mr-2"></i>${msg}`;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function playNotificationSound() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.32);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 0.32);
+      } catch (e) {}
+    }
+
+    function showView(id) {
+      document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove('hidden');
+        el.classList.add('fade-up');
+      }
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+
+    function skipWelcome() {
+      clearTimeout(welcomeTimer);
+      showView('login-view');
+    }
+
+    function saveCart() {
+      localStorage.setItem('gcafe_cart', JSON.stringify(cart));
+      updateCartUI();
+    }
+
+    function saveRedeemedTokenCart() {
+      sessionStorage.setItem('gcafe_redeemed_cart', JSON.stringify(redeemedTokenItems));
+      updateCartUI();
+    }
+
+    function getReservedTokens() {
+      return redeemedTokenItems.reduce((sum, item) => sum + ((item.tokensRequired || 0) * item.qty), 0);
+    }
+
+    function getTokenSeenKey() {
+      return currentUser ? `gcafe_token_seen_${currentUser.phone}` : 'gcafe_token_seen_guest';
+    }
+
+    function computeOrderTotals() {
+      const sub = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+      const disc = appliedCoupon ? Math.min(appliedCoupon.val, sub) : 0;
+      const userOrders = currentUser && !currentUser.isStaff ? getOrders().filter(o => o.customer.phone === currentUser.phone && o.orderType !== 'table') : [];
+      const isFirstOrder = userOrders.length === 0;
+      let deliveryFee = 0;
+      let deliveryLabel = '₹0';
+      if (isFirstOrder) {
+        deliveryLabel = '<span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">Free (First Order)</span>';
+      } else if (sub >= 350) {
+        deliveryLabel = '<span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">Free</span>';
+      } else if (cart.length > 0 || redeemedTokenItems.length > 0) {
+        deliveryFee = 10;
+        deliveryLabel = '₹10';
+      }
+      const tokenConfig = getTokenConfig();
+      const rewardDivisor = tokenConfig.rewardDivisor || 50;
+      const rewardTokens = tokenConfig.rewardTokens || 2;
+      const tokensEarned = tokenConfig.active ? Math.floor(Math.max(sub - disc, 0) / rewardDivisor) * rewardTokens : 0;
+      const total = Math.max(0, sub - disc) + deliveryFee;
+      return { sub, disc, deliveryFee, deliveryLabel, total, tokensEarned };
+    }
+
+    function saveUserDB(previousPhone = null) {
+      if (!currentUser || currentUser.isStaff) return;
+      // Use Firebase usersDb if available, else fall back to localStorage
+      if (window.fbGetUsersDb && window.fbSaveUsersDb) {
+        const usersDb = window.fbGetUsersDb();
+        if (previousPhone && previousPhone !== currentUser.phone && usersDb[previousPhone]) delete usersDb[previousPhone];
+        usersDb[currentUser.phone] = { tokens: currentUser.tokens || 0, address: currentUser.address || '' };
+        window.fbSaveUsersDb(usersDb);
+      } else {
+        const db = JSON.parse(localStorage.getItem('gcafe_users_db') || '{}');
+        if (previousPhone && previousPhone !== currentUser.phone && db[previousPhone]) delete db[previousPhone];
+        db[currentUser.phone] = { tokens: currentUser.tokens || 0, address: currentUser.address || '' };
+        localStorage.setItem('gcafe_users_db', JSON.stringify(db));
+      }
+      persistCurrentUser();
+    }
+
+    function toLocalISO(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function renderMenuSkeletons() {
+      const container = document.getElementById('menu-container');
+      if (!container) return;
+      container.innerHTML = Array.from({ length: 6 }).map(() => `
+        <div class="overflow-hidden rounded-[1.9rem] surface-card">
+          <div class="h-52 shimmer"></div>
+          <div class="space-y-3 p-5">
+            <div class="h-4 w-2/3 rounded-full shimmer"></div>
+            <div class="h-3 w-full rounded-full shimmer"></div>
+            <div class="h-3 w-4/5 rounded-full shimmer"></div>
+            <div class="mt-4 flex items-center justify-between">
+              <div class="h-5 w-16 rounded-full shimmer"></div>
+              <div class="h-10 w-24 rounded-2xl shimmer"></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ====== INIT ======
+    function init() {
+      applyTheme(localStorage.getItem('gcafe_theme') || 'light');
+      const rememberEl = document.getElementById('remember-me');
+      if (rememberEl) rememberEl.checked = isRememberedLogin();
+
+      // Wait for Firebase to load data before routing the user.
+      // If Firebase config is not yet filled in, _firebaseReady won't fire —
+      // so we fall back to localStorage after 3 seconds.
+      const continueInit = () => {
+        if (currentUser) {
+          routeUser();
+        } else {
+          showView('welcome-view');
+          welcomeTimer = setTimeout(() => showView('login-view'), 1000);
+        }
+        startSlider();
+        startSearchPlaceholderRotation();
+        lastOrderCount = getOrders().length;
+        renderStaffSummary();
+      };
+
+      if (window._firebaseReady) {
+        continueInit();
+      } else {
+        window.addEventListener('firebaseReady', continueInit, { once: true });
+        // Safety fallback: if Firebase takes more than 4s, start anyway
+        setTimeout(() => { if (!window._firebaseReady) continueInit(); }, 4000);
+      }
+
+      // Firebase real-time listeners fire these events (defined in the module script above).
+      // The old localStorage 'storage' event only worked on the SAME device — Firebase works cross-device.
+      window.addEventListener('ordersUpdated', handleOrdersChange);
+
+      window.addEventListener('gcafe_coupons_updated', () => {
+        if (staffTab === 'COUPONS') renderCoupons();
+      });
+
+      window.addEventListener('tokenConfigUpdated', () => {
+        if (currentUser && !currentUser.isStaff) checkTokenPopup(true);
+        renderStaffSummary();
+        if (staffTab === 'TOKENS') renderTokenItems();
+        if (document.getElementById('cart-modal') && !document.getElementById('cart-modal').classList.contains('hidden')) renderCartModal();
+      });
+
+      // Keep same-device fallback (if Firebase is not configured yet)
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'gcafe_orders') handleOrdersChange();
+        if (e.key === 'gcafe_coupons' && staffTab === 'COUPONS') renderCoupons();
+        if (e.key === 'gcafe_tokens_config') {
+          if (currentUser && !currentUser.isStaff) checkTokenPopup(true);
+          if (staffTab === 'TOKENS') renderTokenItems();
+        }
+      });
+    }
+
+    function handleOrdersChange() {
+      const orders = getOrders();
+      if (currentUser) {
+        if (currentUser.isStaff) {
+          if (orders.length > lastOrderCount) {
+            playNotificationSound();
+            showToast('New order received!');
+          }
+          if (staffTab === 'PENDING') renderStaffOrders();
+          if (staffTab === 'COMPLETED') renderCompletedOrders();
+          if (staffTab === 'REVENUE') renderRevenue();
+          renderStaffSummary();
+        } else {
+          checkActiveCustomerOrder();
+          if (!document.getElementById('tracking-modal').classList.contains('hidden')) renderTrackingModal();
+          if (!document.getElementById('cart-modal').classList.contains('hidden')) renderCartModal();
+        }
+      }
+      lastOrderCount = orders.length;
+    }
+
+    function routeUser() {
+      clearTimeout(welcomeTimer);
+      if (currentUser.isStaff) {
+        showView('staff-view');
+        switchStaffTab('PENDING');
+      } else {
+        if (currentUser.tokens === undefined) currentUser.tokens = 0;
+        persistCurrentUser();
+        showView('customer-view');
+        renderCategories();
+        renderMenuSkeletons();
+        setTimeout(() => renderMenu(), 180);
+        updateCartUI();
+        checkActiveCustomerOrder();
+        checkTokenPopup();
+      }
+    }
+
+    function startSlider() {
+      setInterval(() => {
+        const slides = document.querySelectorAll('.hero-slide');
+        const dots = document.querySelectorAll('#slider-dots .slider-dot');
+        if (!slides.length || !dots.length) return;
+        slides[sliderIndex].classList.remove('active');
+        dots[sliderIndex].classList.remove('active');
+        sliderIndex = (sliderIndex + 1) % slides.length;
+        slides[sliderIndex].classList.add('active');
+        dots[sliderIndex].classList.add('active');
+      }, 3200);
+    }
+
+    function startSearchPlaceholderRotation() {
+      const suggestions = [
+        'Search pizzas, cakes, burgers...',
+        'Try chocolate truffle cake...',
+        'Looking for tandoori paneer?',
+        'Craving grilled sandwiches?'
+      ];
+      let idx = 0;
+      setInterval(() => {
+        const input = document.getElementById('search-input');
+        if (input && !input.value) {
+          input.placeholder = suggestions[idx];
+          idx = (idx + 1) % suggestions.length;
+        }
+      }, 2800);
+    }
+
+    // ====== AUTH ======
+    window.checkStaffLogin = () => {
+      const name = document.getElementById('login-name').value.trim().toUpperCase();
+      const container = document.getElementById('staff-password-container');
+      if (!container) return;
+      if (name === 'STAFF') container.classList.remove('hidden');
+      else container.classList.add('hidden');
+    };
+
+    window.handleLogin = () => {
+      const name = document.getElementById('login-name').value.trim();
+      const phone = document.getElementById('login-phone').value.trim();
+      const password = document.getElementById('login-password') ? document.getElementById('login-password').value.trim() : '';
+      const remember = document.getElementById('remember-me').checked;
+      const isStaff = name.toUpperCase() === 'STAFF';
+
+      if (!name) return showToast('Please enter your name', true);
+      if (!isStaff && (!phone || phone.length !== 10)) return showToast('Enter a valid 10-digit mobile number', true);
+      if (isStaff && password !== '2MF') return showToast('Incorrect staff password', true);
+
+      if (remember) localStorage.setItem('gcafe_remember_login', '1');
+      else localStorage.removeItem('gcafe_remember_login');
+
+      document.getElementById('login-text').classList.add('hidden');
+      document.getElementById('login-loader').classList.remove('hidden');
+
+      setTimeout(() => {
+        document.getElementById('login-text').classList.remove('hidden');
+        document.getElementById('login-loader').classList.add('hidden');
+
+        // Load user data from Firebase cache (or localStorage fallback)
+        const usersDb = window.fbGetUsersDb ? window.fbGetUsersDb() : JSON.parse(localStorage.getItem('gcafe_users_db') || '{}');
+        currentUser = {
+          name: isStaff ? 'Admin' : name,
+          phone: isStaff ? (phone || '9999999999') : phone,
+          isStaff,
+          tokens: 0,
+          address: ''
+        };
+
+        if (!isStaff && usersDb[phone]) {
+          currentUser.tokens = usersDb[phone].tokens || 0;
+          currentUser.address = usersDb[phone].address || '';
+        }
+
+        persistCurrentUser();
+        routeUser();
+        showToast(`Welcome ${isStaff ? 'to Staff Portal' : currentUser.name}`);
+      }, 700);
+    };
+
+    window.handleLogout = () => {
+      currentUser = null;
+      appliedCoupon = null;
+      redeemedTokenItems = [];
+      persistCurrentUser();
+      sessionStorage.removeItem('gcafe_redeemed_cart');
+      closeProfile();
+      closeTracking();
+      closeCart(true);
+      closeTokenPopup();
+      showView('login-view');
+      document.getElementById('login-name').value = '';
+      document.getElementById('login-phone').value = '';
+      if (document.getElementById('login-password')) document.getElementById('login-password').value = '';
+      if (document.getElementById('staff-password-container')) document.getElementById('staff-password-container').classList.add('hidden');
+      const rememberEl = document.getElementById('remember-me');
+      if (rememberEl) rememberEl.checked = isRememberedLogin();
+    };
+
+    // ====== CUSTOMER UI ======
+    function renderCategories() {
+      const cats = ['All', ...new Set(menuData.map(item => item.category))];
+      const grid = document.getElementById('category-grid');
+      if (!grid) return;
+      grid.innerHTML = cats.map(cat => {
+        const meta = categoryMeta[cat] || { icon: 'fa-utensils', tone: 'from-slate-700 to-slate-900' };
+        const count = cat === 'All' ? menuData.length : menuData.filter(item => item.category === cat).length;
+        return `
+          <button type="button" onclick="setCategory('${cat}')" class="filter-chip ${activeCategory === cat ? 'active' : ''}">
+            <span class="flex h-8 w-8 items-center justify-center rounded-full ${activeCategory === cat ? 'bg-white/18 text-white' : 'bg-black/5 text-brand-700 dark:bg-white/10 dark:text-brand-200'}">
+              <i class="fa-solid ${meta.icon}"></i>
+            </span>
+            <span class="text-left">
+              <span class="block leading-none">${cat}</span>
+              <span class="mt-1 block text-[10px] font-black uppercase tracking-[0.16em] ${activeCategory === cat ? 'text-white/70' : 'text-slate-400'}">${count} items</span>
+            </span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    window.setCategory = (category) => {
+      activeCategory = category;
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) searchInput.value = '';
+      document.getElementById('current-category-title').innerText = category === 'All' ? 'All Items' : category;
+      document.getElementById('menu-subtitle').innerText = category === 'All' ? 'Explore our full handcrafted selection.' : `Curated favorites from ${category}.`;
+      renderCategories();
+      renderMenu();
+      setTimeout(() => document.getElementById('menu-container').scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    };
+
+    window.goToSlideCategory = (category) => setCategory(category);
+
+    window.handleSearch = () => {
+      activeCategory = 'All';
+      renderCategories();
+      renderMenu();
+    };
+
+    function renderMenu() {
+      const query = (document.getElementById('search-input')?.value || '').toLowerCase();
+      let items = menuData.slice();
+      if (query) {
+        items = items.filter(item => item.name.toLowerCase().includes(query) || item.category.toLowerCase().includes(query));
+        document.getElementById('current-category-title').innerText = 'Search Results';
+        document.getElementById('menu-subtitle').innerText = `Showing matches for “${document.getElementById('search-input').value.trim()}”.`;
+      } else if (activeCategory !== 'All') {
+        items = items.filter(item => item.category === activeCategory);
+        document.getElementById('current-category-title').innerText = activeCategory;
+        document.getElementById('menu-subtitle').innerText = `Curated favorites from ${activeCategory}.`;
+      } else {
+        document.getElementById('current-category-title').innerText = 'All Items';
+        document.getElementById('menu-subtitle').innerText = 'Explore our full handcrafted selection.';
+      }
+
+      const container = document.getElementById('menu-container');
+      if (!container) return;
+      if (!items.length) {
+        container.innerHTML = `
+          <div class="col-span-full rounded-[2rem] surface-card px-6 py-16 text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-200"><i class="fa-solid fa-magnifying-glass text-xl"></i></div>
+            <h4 class="mt-5 text-xl font-black text-slate-900 dark:text-white">No items found</h4>
+            <p class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60">Try another keyword or switch the category filter.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = items.map(item => {
+        const inCart = cart.find(c => c.id === item.id);
+        const qty = inCart ? inCart.qty : 0;
+        return `
+          <div class="card-lift overflow-hidden rounded-[1.9rem] surface-card">
+            <div class="menu-card-image relative h-56 overflow-hidden">
+              <img src="${item.image}" alt="${item.name}" class="h-full w-full object-cover transition duration-700 hover:scale-105">
+              <div class="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-white/88 px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 shadow-sm backdrop-blur-md dark:bg-black/45 dark:text-white">
+                <i class="fa-solid fa-square-caret-up ${item.veg ? 'text-emerald-500' : 'text-rose-500'}"></i>
+                <span>${item.category}</span>
+              </div>
+              <div class="absolute bottom-4 right-4 z-10 rounded-full bg-white/88 px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 shadow-sm backdrop-blur-md dark:bg-black/45 dark:text-white"><i class="fa-solid fa-star mr-1 text-amber-400"></i>4.8</div>
+            </div>
+            <div class="p-5">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h4 class="text-xl font-black leading-tight text-slate-900 dark:text-white">${item.name}</h4>
+                  <p class="mt-2 text-sm font-medium leading-6 text-slate-500 dark:text-white/60">${item.desc}</p>
+                </div>
+              </div>
+              <div class="mt-5 flex items-end justify-between gap-3">
+                <div>
+                  <div class="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-white/45">Price</div>
+                  <div class="text-2xl font-black text-slate-900 dark:text-white">${fmt(item.price)}</div>
+                </div>
+                ${qty === 0 ? `
+                  <button type="button" onclick="addToCart('${item.id}')" class="button-press rounded-2xl border border-brand-200 bg-brand-50 px-5 py-3 text-sm font-extrabold uppercase tracking-[0.16em] text-brand-800 shadow-sm hover:bg-brand-100 dark:border-brand-500/20 dark:bg-brand-900/15 dark:text-brand-100">
+                    Add
+                  </button>
+                ` : `
+                  <div class="flex items-center gap-2 rounded-2xl bg-brand-800 p-1.5 text-white shadow-lg shadow-brand-900/15">
+                    <button type="button" onclick="updateQty('${item.id}',-1)" class="button-press flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"><i class="fa-solid fa-minus text-xs"></i></button>
+                    <span class="min-w-[22px] text-center text-sm font-black">${qty}</span>
+                    <button type="button" onclick="updateQty('${item.id}',1)" class="button-press flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"><i class="fa-solid fa-plus text-xs"></i></button>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ====== CART ======
+    window.addToCart = (id) => {
+      const item = menuData.find(i => i.id === id);
+      const existing = cart.find(i => i.id === id);
+      if (existing) existing.qty += 1;
+      else cart.push({ ...item, qty: 1 });
+      saveCart();
+      renderMenu();
+      showToast(`Added ${item.name}`);
+    };
+
+    window.updateQty = (id, delta) => {
+      const idx = cart.findIndex(i => i.id === id);
+      if (idx > -1) {
+        cart[idx].qty += delta;
+        if (cart[idx].qty <= 0) cart.splice(idx, 1);
+        saveCart();
+        renderMenu();
+        if (!document.getElementById('cart-modal').classList.contains('hidden')) renderCartModal();
+      }
+    };
+
+    function updateCartUI() {
+      const badge = document.getElementById('cart-badge-header');
+      const totalQty = cart.reduce((sum, item) => sum + item.qty, 0) + redeemedTokenItems.reduce((sum, item) => sum + item.qty, 0);
+      const totals = computeOrderTotals();
+
+      if (badge) {
+        if (totalQty > 0) {
+          badge.innerText = totalQty;
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
+
+      const quickBar = document.getElementById('quick-cart-bar');
+      if (quickBar) {
+        if (totalQty > 0) {
+          quickBar.classList.remove('hidden');
+          document.getElementById('quick-cart-count').innerText = `${totalQty} item${totalQty > 1 ? 's' : ''}`;
+          document.getElementById('quick-cart-total').innerText = fmt(totals.total);
+        } else {
+          quickBar.classList.add('hidden');
+        }
+      }
+    }
+
+    window.openCart = () => {
+      const tokenConfig = getTokenConfig();
+      const hasTokenOffers = tokenConfig.active && tokenConfig.items && tokenConfig.items.length > 0;
+      if (cart.length === 0 && redeemedTokenItems.length === 0 && !hasTokenOffers) return showToast('Cart is empty', true);
+      appliedCoupon = null;
+      document.getElementById('coupon-input').value = '';
+      document.getElementById('coupon-message').classList.add('hidden');
+      if (currentUser && currentUser.address) document.getElementById('delivery-location').value = currentUser.address;
+      document.getElementById('cart-modal').classList.remove('hidden');
+      document.getElementById('cart-panel').classList.remove('translate-x-full');
+      renderCartModal();
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeCart = (instant = false) => {
+      const panel = document.getElementById('cart-panel');
+      const modal = document.getElementById('cart-modal');
+      panel.classList.add('translate-x-full');
+      const done = () => {
+        modal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+      };
+      if (instant) done();
+      else setTimeout(done, 300);
+    };
+
+    window.applyCoupon = () => {
+      const code = document.getElementById('coupon-input').value.trim().toUpperCase();
+      if (!code) return;
+      const coupon = getCoupons().find(c => c.code === code);
+      const msg = document.getElementById('coupon-message');
+      msg.classList.remove('hidden');
+      if (coupon) {
+        appliedCoupon = coupon;
+        msg.innerText = `Coupon '${code}' applied successfully.`;
+        msg.className = 'mt-2 block text-xs font-bold text-emerald-600 dark:text-emerald-300';
+        renderCartModal();
+        showToast('Coupon applied!');
+      } else {
+        appliedCoupon = null;
+        msg.innerText = 'Invalid or expired coupon.';
+        msg.className = 'mt-2 block text-xs font-bold text-red-500';
+        renderCartModal();
+      }
+    };
+
+    function renderTokenRedemptions() {
+      const box = document.getElementById('token-redemption-container');
+      if (!box || !currentUser || currentUser.isStaff) return;
+
+      const cfg = getTokenConfig();
+      redeemedTokenItems = redeemedTokenItems.filter(item => cfg.items.some(t => t.id === item.id));
+      saveRedeemedTokenCart();
+
+      if (!cfg.active || !cfg.items || !cfg.items.length) {
+        if (redeemedTokenItems.length) {
+          redeemedTokenItems = [];
+          saveRedeemedTokenCart();
+        }
+        box.innerHTML = `
+          <div class="rounded-[1.8rem] border border-dashed border-black/10 bg-black/[0.02] p-5 text-center dark:border-white/10 dark:bg-white/[0.03]">
+            <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-200">🪙</div>
+            <h4 class="mt-4 text-lg font-black text-slate-900 dark:text-white">Token rewards are currently unavailable</h4>
+            <p class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60">When staff turns the token system live, redeemable dishes will appear here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const availableBalance = (currentUser.tokens || 0) - getReservedTokens();
+      box.innerHTML = `
+        <div class="rounded-[1.8rem] surface-card p-4">
+          <div class="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <div class="text-[11px] font-black uppercase tracking-[0.2em] text-yellow-700/80 dark:text-yellow-200/70">Redeem Exclusive Dishes</div>
+              <h3 class="text-lg font-black text-slate-900 dark:text-white">Reward Tokens</h3>
+            </div>
+            <div class="rounded-2xl bg-yellow-50 px-3 py-2 text-right dark:bg-yellow-500/10">
+              <div class="text-[10px] font-black uppercase tracking-[0.18em] text-yellow-700/80 dark:text-yellow-200/70">Available</div>
+              <div class="text-base font-black text-yellow-800 dark:text-yellow-100">${availableBalance}</div>
+            </div>
+          </div>
+          <div class="space-y-3">
+            ${cfg.items.map(item => {
+              const selected = redeemedTokenItems.find(r => r.id === item.id);
+              const qty = selected ? selected.qty : 0;
+              const canAdd = availableBalance >= item.tokens;
+              return `
+                <div class="rounded-[1.4rem] border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 p-4 dark:border-yellow-500/15 dark:from-yellow-500/10 dark:to-amber-500/5">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="text-sm font-black text-slate-900 dark:text-white">${item.name}</div>
+                      <div class="mt-1 text-xs font-bold text-yellow-800 dark:text-yellow-100">Redeem for ${item.tokens} tokens</div>
+                      <div class="mt-1 text-xs font-medium text-slate-500 dark:text-white/55">Regular value: ${fmt(item.price || 0)}</div>
+                    </div>
+                    ${qty === 0 ? `
+                      <button type="button" ${canAdd ? '' : 'disabled'} onclick="addRedeemedTokenItem(${item.id})" class="button-press rounded-2xl px-4 py-2 text-xs font-extrabold uppercase tracking-[0.16em] ${canAdd ? 'bg-[#2b1a10] text-white hover:bg-black' : 'cursor-not-allowed bg-black/10 text-slate-400 dark:bg-white/10 dark:text-white/30'}">Redeem</button>
+                    ` : `
+                      <div class="flex items-center gap-2 rounded-2xl bg-[#2b1a10] p-1.5 text-white shadow-lg">
+                        <button type="button" onclick="updateRedeemedTokenQty(${item.id},-1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"><i class="fa-solid fa-minus text-xs"></i></button>
+                        <span class="min-w-[18px] text-center text-sm font-black">${qty}</span>
+                        <button type="button" ${canAdd ? '' : 'disabled'} onclick="updateRedeemedTokenQty(${item.id},1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 ${canAdd ? '' : 'cursor-not-allowed opacity-35'}"><i class="fa-solid fa-plus text-xs"></i></button>
+                      </div>
+                    `}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    window.addRedeemedTokenItem = (tokenId) => {
+      const cfg = getTokenConfig();
+      const offer = cfg.items.find(i => i.id === tokenId);
+      if (!offer) return;
+      const availableBalance = (currentUser.tokens || 0) - getReservedTokens();
+      if (availableBalance < offer.tokens) return showToast('Not enough tokens available', true);
+      const existing = redeemedTokenItems.find(i => i.id === tokenId);
+      if (existing) existing.qty += 1;
+      else redeemedTokenItems.push({ ...offer, qty: 1 });
+      saveRedeemedTokenCart();
+      renderCartModal();
+      showToast(`${offer.name} added as token reward`);
+    };
+
+    window.updateRedeemedTokenQty = (tokenId, delta) => {
+      const idx = redeemedTokenItems.findIndex(i => i.id === tokenId);
+      if (idx === -1) return;
+      if (delta > 0) {
+        const offer = redeemedTokenItems[idx];
+        const availableBalance = (currentUser.tokens || 0) - getReservedTokens();
+        if (availableBalance < offer.tokensRequired) return showToast('Not enough tokens available', true);
+      }
+      redeemedTokenItems[idx].qty += delta;
+      if (redeemedTokenItems[idx].qty <= 0) redeemedTokenItems.splice(idx, 1);
+      saveRedeemedTokenCart();
+      renderCartModal();
+    };
+
+    function renderCartModal() {
+      const list = document.getElementById('cart-items-container');
+      const totals = computeOrderTotals();
+      document.getElementById('cart-token-balance').innerText = currentUser ? (currentUser.tokens || 0) : 0;
+
+      let html = '';
+      if (cart.length) {
+        html += cart.map(item => `
+          <div class="rounded-[1.6rem] surface-card p-4">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="text-base font-black text-slate-900 dark:text-white">${item.name}</div>
+                <div class="mt-1 text-sm font-bold text-slate-500 dark:text-white/55">${fmt(item.price)} each</div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex items-center gap-2 rounded-2xl border border-black/5 bg-black/[0.03] p-1 dark:border-white/10 dark:bg-white/5">
+                  <button type="button" onclick="updateQty('${item.id}',-1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white/70 text-slate-700 hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><i class="fa-solid fa-minus text-xs"></i></button>
+                  <span class="min-w-[18px] text-center text-sm font-black text-slate-900 dark:text-white">${item.qty}</span>
+                  <button type="button" onclick="updateQty('${item.id}',1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white/70 text-slate-700 hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15"><i class="fa-solid fa-plus text-xs"></i></button>
+                </div>
+                <div class="text-sm font-black text-slate-900 dark:text-white">${fmt(item.price * item.qty)}</div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      if (redeemedTokenItems.length) {
+        html += redeemedTokenItems.map(item => `
+          <div class="rounded-[1.6rem] border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 p-4 dark:border-yellow-500/15 dark:from-yellow-500/10 dark:to-amber-500/5">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="text-base font-black text-slate-900 dark:text-white">${item.name}</div>
+                <div class="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-yellow-800 dark:text-yellow-100"><i class="fa-solid fa-coins mr-1"></i> Token Reward • ${item.tokensRequired} tokens each</div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex items-center gap-2 rounded-2xl bg-[#2b1a10] p-1 text-white shadow-lg">
+                  <button type="button" onclick="updateRedeemedTokenQty(${item.id},-1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"><i class="fa-solid fa-minus text-xs"></i></button>
+                  <span class="min-w-[18px] text-center text-sm font-black">${item.qty}</span>
+                  <button type="button" onclick="updateRedeemedTokenQty(${item.id},1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"><i class="fa-solid fa-plus text-xs"></i></button>
+                </div>
+                <div class="text-sm font-black text-yellow-800 dark:text-yellow-100">${fmt(0)}</div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      if (!html) {
+        html = `
+          <div class="rounded-[1.8rem] border border-dashed border-black/10 bg-black/[0.02] p-8 text-center dark:border-white/10 dark:bg-white/[0.03]">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-200"><i class="fa-solid fa-bag-shopping text-xl"></i></div>
+            <h4 class="mt-5 text-xl font-black text-slate-900 dark:text-white">Your cart is ready for selections</h4>
+            <p class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60">Add menu items or redeem reward dishes below.</p>
+          </div>
+        `;
+      }
+
+      list.innerHTML = html;
+      document.getElementById('cart-subtotal').innerText = fmt(totals.sub);
+      if (appliedCoupon) {
+        document.getElementById('cart-discount-row').classList.remove('hidden');
+        document.getElementById('cart-discount').innerText = '-' + fmt(totals.disc);
+      } else {
+        document.getElementById('cart-discount-row').classList.add('hidden');
+      }
+      document.getElementById('cart-delivery').innerHTML = totals.deliveryLabel;
+      document.getElementById('cart-final-total').innerText = fmt(totals.total);
+      document.getElementById('cart-tokens-earned').innerText = totals.tokensEarned;
+      document.getElementById('cart-panel').dataset.total = totals.total;
+      document.getElementById('cart-panel').dataset.tokensEarned = totals.tokensEarned;
+      document.getElementById('cart-panel').dataset.tokensSpent = getReservedTokens();
+      renderTokenRedemptions();
+      updateCartUI();
+    }
+
+    window.handlePlaceOrder = () => {
+      if (cart.length === 0 && redeemedTokenItems.length === 0) return showToast('Add something to your cart first', true);
+      const address = document.getElementById('delivery-location').value.trim();
+      const instructions = document.getElementById('cooking-instructions').value.trim();
+      if (!address) return showToast('Please enter a delivery address', true);
+      const tokensSpent = getReservedTokens();
+      if ((currentUser.tokens || 0) < tokensSpent) return showToast('You do not have enough tokens for this redemption', true);
+
+      document.getElementById('place-order-text').classList.add('hidden');
+      document.getElementById('place-order-loader').classList.remove('hidden');
+
+      setTimeout(() => {
+        const totals = computeOrderTotals();
+        const orderItems = [
+          ...cart.map(item => ({ ...item })),
+          ...redeemedTokenItems.map(item => ({
+            id: `reward-${item.id}`,
+            menuId: item.menuId,
+            category: 'Rewards',
+            name: `${item.name} (Token Reward)`,
+            price: 0,
+            qty: item.qty,
+            image: item.image || '',
+            veg: true,
+            desc: 'Redeemed using reward tokens.',
+            tokenRedeemed: true,
+            tokensRequired: item.tokensRequired
+          }))
+        ];
+
+        const order = {
+          id: 'ORD' + Math.floor(100000 + Math.random() * 900000),
+          customer: { ...currentUser },
+          address,
+          instructions,
+          items: orderItems,
+          total: totals.total,
+          status: 'RECEIVED',
+          orderType: 'delivery',
+          timestamp: new Date().toISOString(),
+          couponCode: appliedCoupon ? appliedCoupon.code : null,
+          tokensEarned: totals.tokensEarned,
+          tokensSpent
+        };
+
+        const orders = getOrders();
+        orders.push(order);
+        saveOrders(orders);
+
+        currentUser.tokens = Math.max(0, (currentUser.tokens || 0) - tokensSpent + totals.tokensEarned);
+        currentUser.address = address;
+        saveUserDB();
+
+        cart = [];
+        redeemedTokenItems = [];
+        saveCart();
+        saveRedeemedTokenCart();
+        appliedCoupon = null;
+        document.getElementById('delivery-location').value = '';
+        document.getElementById('cooking-instructions').value = '';
+        document.getElementById('coupon-input').value = '';
+        document.getElementById('coupon-message').classList.add('hidden');
+        document.getElementById('place-order-text').classList.remove('hidden');
+        document.getElementById('place-order-loader').classList.add('hidden');
+        closeCart();
+        renderMenu();
+        showToast(`Order placed! You earned ${totals.tokensEarned} tokens.`);
+        checkActiveCustomerOrder();
+        showOrderTracking();
+      }, 900);
+    };
+
+    // ====== TRACKING ======
+    function checkActiveCustomerOrder() {
+      if (!currentUser || currentUser.isStaff) return;
+      const orders = getOrders().filter(o => o.customer.phone === currentUser.phone && o.orderType !== 'table').sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const btn = document.getElementById('active-order-btn');
+      if (!btn) return;
+      if (orders.length && orders[0].status !== 'DELIVERED') {
+        btn.classList.remove('hidden');
+        btn.style.display = 'inline-flex';
+      } else {
+        btn.classList.add('hidden');
+        btn.style.display = 'none';
+      }
+    }
+
+    window.showOrderTracking = () => {
+      document.getElementById('tracking-modal').classList.remove('hidden');
+      document.getElementById('tracking-modal').classList.add('flex');
+      renderTrackingModal();
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeTracking = () => {
+      document.getElementById('tracking-modal').classList.add('hidden');
+      document.getElementById('tracking-modal').classList.remove('flex');
+      document.body.style.overflow = 'auto';
+    };
+
+    function renderTrackingModal() {
+      const orders = getOrders().filter(o => o.customer.phone === currentUser.phone && o.orderType !== 'table').sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+      if (!orders.length) return closeTracking();
+      const order = orders[0];
+      document.getElementById('tracking-order-id').innerText = order.id;
+      const currentIndex = STATUS_ORDER.indexOf(order.status);
+      document.getElementById('tracking-timeline').innerHTML = STATUS_ORDER.map((statusKey, idx) => {
+        const status = STATUSES[statusKey];
+        const isDone = idx <= currentIndex;
+        const isCurrent = idx === currentIndex;
+        return `
+          <div class="relative ${idx < STATUS_ORDER.length - 1 ? 'pb-6' : ''}">
+            ${idx < STATUS_ORDER.length - 1 ? `<div class="order-ring ${isDone ? 'opacity-100' : 'opacity-25'}"></div>` : ''}
+            <div class="flex items-start gap-4">
+              <div class="relative z-10 flex h-9 w-9 items-center justify-center rounded-2xl ${isDone ? status.bg : 'bg-slate-100 dark:bg-white/10'} ${isDone ? status.color : 'text-slate-400 dark:text-white/35'}">
+                <i class="fa-solid ${status.icon} text-sm"></i>
+              </div>
+              <div class="pt-1">
+                <h4 class="text-base font-black ${isDone ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-white/35'}">${status.label}</h4>
+                ${isCurrent ? `<p class="mt-2 inline-block rounded-2xl bg-black/[0.04] px-3 py-2 text-xs font-bold text-slate-600 dark:bg-white/[0.05] dark:text-white/70">${status.text}</p>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ====== TOKEN POPUP ======
+    function checkTokenPopup(forceOpen = false) {
+      const cfg = getTokenConfig();
+      const tokenBtn = document.getElementById('customer-token-btn');
+      if (!tokenBtn || !currentUser || currentUser.isStaff) return;
+
+      if (cfg.active && cfg.items && cfg.items.length) {
+        tokenBtn.classList.remove('hidden'); tokenBtn.style.display = 'inline-flex';
+        const key = getTokenSeenKey();
+        if (forceOpen || !sessionStorage.getItem(key)) {
+          openTokenPopup();
+          sessionStorage.setItem(key, '1');
+        }
+      } else {
+        tokenBtn.classList.add('hidden'); tokenBtn.style.display = 'none';
+      }
+    }
+
+    window.openTokenPopup = () => {
+      const cfg = getTokenConfig();
+      if (!cfg.active || !cfg.items || !cfg.items.length) return showToast('No token offers right now.', true);
+      document.getElementById('token-popup-balance').innerText = currentUser ? (currentUser.tokens || 0) : 0;
+      document.getElementById('token-popup-items').innerHTML = cfg.items.map(item => {
+        const enough = currentUser && (currentUser.tokens || 0) >= item.tokens;
+        return `
+          <div class="mb-3 rounded-[1.4rem] border border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 p-4 dark:border-yellow-500/15 dark:from-yellow-500/10 dark:to-amber-500/5">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <div class="text-base font-black text-slate-900 dark:text-white">${item.name}</div>
+                <div class="mt-1 text-sm font-bold text-yellow-800 dark:text-yellow-100">${item.tokens} tokens required</div>
+                <div class="mt-1 text-xs font-medium text-slate-500 dark:text-white/55">Regular value: ${fmt(item.price || 0)}</div>
+              </div>
+              <button type="button" ${enough ? '' : 'disabled'} onclick="redeemFromPopup(${item.id})" class="button-press rounded-2xl px-4 py-2 text-xs font-extrabold uppercase tracking-[0.16em] ${enough ? 'bg-[#2b1a10] text-white hover:bg-black' : 'cursor-not-allowed bg-black/10 text-slate-400 dark:bg-white/10 dark:text-white/30'}">Redeem</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      const popup = document.getElementById('token-live-popup');
+      popup.classList.remove('hidden');
+      popup.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.redeemFromPopup = (tokenId) => {
+      closeTokenPopup();
+      openCart();
+      setTimeout(() => addRedeemedTokenItem(tokenId), 120);
+    };
+
+    window.closeTokenPopup = () => {
+      const popup = document.getElementById('token-live-popup');
+      popup.classList.add('hidden');
+      popup.classList.remove('flex');
+      document.body.style.overflow = 'auto';
+    };
+
+    window.closeTokenPopupAndOrder = () => {
+      closeTokenPopup();
+      openCart();
+    };
+
+    // ====== PROFILE ======
+    window.openProfile = () => {
+      if (!currentUser) return;
+      document.getElementById('profile-name').innerText = currentUser.name;
+      document.getElementById('profile-phone').innerText = '+91 ' + currentUser.phone;
+      document.getElementById('profile-initial').innerText = currentUser.name.charAt(0).toUpperCase();
+      document.getElementById('profile-tokens').innerText = currentUser.tokens || 0;
+      document.getElementById('edit-name').value = currentUser.name || '';
+      document.getElementById('edit-phone').value = currentUser.phone || '';
+      document.getElementById('edit-address').value = currentUser.address || '';
+      const modal = document.getElementById('profile-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeProfile = () => {
+      const modal = document.getElementById('profile-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.body.style.overflow = 'auto';
+    };
+
+    window.saveProfile = () => {
+      const name = document.getElementById('edit-name').value.trim();
+      const phone = document.getElementById('edit-phone').value.trim();
+      const address = document.getElementById('edit-address').value.trim();
+      if (!name) return showToast('Name cannot be empty', true);
+      if (!phone || phone.length !== 10) return showToast('Enter a valid 10-digit number', true);
+      const oldPhone = currentUser.phone;
+      currentUser.name = name;
+      currentUser.phone = phone;
+      currentUser.address = address;
+      saveUserDB(oldPhone);
+      showToast('Profile updated successfully!');
+      closeProfile();
+      checkActiveCustomerOrder();
+      if (!document.getElementById('cart-modal').classList.contains('hidden')) renderCartModal();
+    };
+
+    // ====== STAFF SUMMARY ======
+    function renderStaffSummary() {
+      const container = document.getElementById('staff-summary-strip');
+      if (!container) return;
+      container.innerHTML = '';
+    }
+
+    // ====== STAFF TABS ======
+    window.switchStaffTab = (tab) => {
+      staffTab = tab;
+      ALL_TABS.forEach(t => {
+        const btn = document.getElementById('stab-' + t);
+        if (!btn) return;
+        btn.classList.toggle('active', t === tab);
+      });
+      ['staff-orders-area','staff-completed-area','staff-coupons-area','staff-tokens-area','staff-revenue-area'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+      if (tab === 'PENDING') {
+        document.getElementById('staff-orders-area').classList.remove('hidden');
+        orderFilter = 'all';
+        setOrderFilter('all', true);
+        renderStaffOrders();
+      } else if (tab === 'COMPLETED') {
+        document.getElementById('staff-completed-area').classList.remove('hidden');
+        compFilter = 'today';
+        renderCompletedOrders();
+      } else if (tab === 'COUPONS') {
+        document.getElementById('staff-coupons-area').classList.remove('hidden');
+        renderCoupons();
+      } else if (tab === 'TOKENS') {
+        document.getElementById('staff-tokens-area').classList.remove('hidden');
+        renderTokenItems();
+      } else if (tab === 'REVENUE') {
+        document.getElementById('staff-revenue-area').classList.remove('hidden');
+        renderRevenue();
+      }
+      renderStaffSummary();
+    };
+
+    // ====== ACTIVE ORDERS ======
+    window.setOrderFilter = (filter, skipRender = false) => {
+      orderFilter = filter;
+      ['all','delivery','table'].forEach(key => {
+        const el = document.getElementById('ftab-' + key);
+        if (el) el.classList.toggle('active', key === filter);
+      });
+      if (!skipRender) renderStaffOrders();
+    };
+
+    function renderStaffOrders() {
+      const pool = getOrders().filter(order => order.status !== 'DELIVERED').sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+      document.getElementById('staff-order-count').innerText = pool.length;
+      document.getElementById('staff-tab-label').innerText = 'Active Orders';
+      const deliveryCount = pool.filter(o => o.orderType !== 'table').length;
+      const tableCount = pool.filter(o => o.orderType === 'table').length;
+      document.getElementById('ftab-delivery-count').innerText = deliveryCount;
+      document.getElementById('ftab-table-count').innerText = tableCount;
+
+      let display = pool;
+      if (orderFilter === 'delivery') display = pool.filter(order => order.orderType !== 'table');
+      else if (orderFilter === 'table') display = pool.filter(order => order.orderType === 'table');
+      renderOrderCards('staff-orders-container', display, true);
+      renderStaffSummary();
+    }
+
+    // ====== COMPLETED ORDERS ======
+    window.setCompFilter = (filter) => {
+      compFilter = filter;
+      compStartDate = null;
+      compEndDate = null;
+      ['today','week','month','filter-btn'].forEach(key => {
+        const el = document.getElementById('comp-' + key);
+        if (el) el.classList.toggle('active', key === filter);
+      });
+      document.getElementById('comp-calendar-box').classList.add('hidden');
+      renderCompletedOrders();
+    };
+
+    window.toggleCompCalendar = () => {
+      const box = document.getElementById('comp-calendar-box');
+      box.classList.toggle('hidden');
+      if (!box.classList.contains('hidden')) {
+        renderCal('comp-start-cal', 'comp', 'start');
+        renderCal('comp-end-cal', 'comp', 'end');
+      }
+    };
+
+    window.applyCompFilter = () => {
+      if (!compStartDate || !compEndDate) return showToast('Select both start and end dates', true);
+      compFilter = 'custom';
+      ['today','week','month'].forEach(key => {
+        const el = document.getElementById('comp-' + key);
+        if (el) el.classList.remove('active');
+      });
+      document.getElementById('comp-filter-btn').classList.add('active');
+      renderCompletedOrders();
+    };
+
+    function getCompDateRange() {
+      const now = new Date();
+      if (compFilter === 'today') {
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return { start, end: new Date(start.getTime() + 86400000 - 1) };
+      }
+      if (compFilter === 'week') {
+        const day = now.getDay();
+        const start = new Date(now);
+        start.setDate(now.getDate() - day);
+        start.setHours(0,0,0,0);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        end.setHours(23,59,59,999);
+        return { start, end };
+      }
+      if (compFilter === 'month') {
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59) };
+      }
+      if (compFilter === 'custom' && compStartDate && compEndDate) {
+        return { start: new Date(compStartDate + 'T00:00:00'), end: new Date(compEndDate + 'T23:59:59') };
+      }
+      return { start: new Date(0), end: new Date() };
+    }
+
+    function renderCompletedOrders() {
+      const { start, end } = getCompDateRange();
+      const pool = getOrders().filter(order => {
+        const d = new Date(order.timestamp);
+        return order.status === 'DELIVERED' && d >= start && d <= end;
+      }).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+      document.getElementById('comp-order-count').innerText = pool.length;
+      renderOrderCards('completed-orders-container', pool, false);
+      renderStaffSummary();
+    }
+
+    // ====== ORDER CARD RENDERER ======
+    function renderOrderCards(containerId, orders, isActive) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      if (!orders.length) {
+        container.innerHTML = `
+          <div class="col-span-full rounded-[2rem] surface-card px-6 py-16 text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-200"><i class="fa-solid fa-inbox text-xl"></i></div>
+            <h4 class="mt-5 text-xl font-black text-slate-900 dark:text-white">No orders found</h4>
+            <p class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60">The selected filter has no matching orders right now.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = orders.map(order => {
+        const time = new Date(order.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const status = STATUSES[order.status];
+        const isTable = order.orderType === 'table';
+        const badge = isTable
+          ? `<span class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-amber-800 dark:border-amber-500/15 dark:bg-amber-500/10 dark:text-amber-200"><i class="fa-solid fa-chair"></i> On Table • T${order.tableNumber || '?'}</span>`
+          : `<span class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-800 dark:border-blue-500/15 dark:bg-blue-500/10 dark:text-blue-200"><i class="fa-solid fa-motorcycle"></i> Home Delivery</span>`;
+
+        let actions = '';
+        if (isActive) {
+          if (isTable) {
+            actions = `<button onclick="updateOrderStatus('${order.id}','DELIVERED')" class="button-press w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-700"><i class="fa-solid fa-check mr-2"></i>Mark Complete</button>`;
+          } else {
+            actions = `
+              <div class="grid grid-cols-3 gap-3">
+                <button onclick="updateOrderStatus('${order.id}','PREPARING')" class="button-press rounded-2xl px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.15em] ${order.status !== 'RECEIVED' ? 'cursor-default bg-black/5 text-slate-400 dark:bg-white/5 dark:text-white/30' : 'bg-orange-50 text-orange-700 hover:bg-orange-100 dark:bg-orange-500/10 dark:text-orange-200'}">Prep</button>
+                <button onclick="updateOrderStatus('${order.id}','DISPATCHED')" class="button-press rounded-2xl px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.15em] ${order.status === 'DISPATCHED' ? 'cursor-default bg-black/5 text-slate-400 dark:bg-white/5 dark:text-white/30' : 'bg-violet-50 text-violet-700 hover:bg-violet-100 dark:bg-violet-500/10 dark:text-violet-200'}">Dispatch</button>
+                <button onclick="updateOrderStatus('${order.id}','DELIVERED')" class="button-press rounded-2xl bg-emerald-600 px-3 py-3 text-[11px] font-extrabold uppercase tracking-[0.15em] text-white hover:bg-emerald-700">Deliver</button>
+              </div>
+            `;
+          }
+        }
+
+        return `
+          <div class="overflow-hidden rounded-[2rem] surface-card">
+            <div class="border-b border-black/5 p-5 dark:border-white/10">
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div class="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Order ID</div>
+                  <div class="mt-1 text-xl font-black text-slate-900 dark:text-white">${order.id}</div>
+                  <div class="mt-2 text-sm font-bold text-slate-500 dark:text-white/55">${time}</div>
+                </div>
+                <div class="flex flex-col items-end gap-2">
+                  ${badge}
+                  <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${status.bg} ${status.color}"><i class="fa-solid ${status.icon}"></i>${status.label}</span>
+                </div>
+              </div>
+            </div>
+            <div class="border-b border-black/5 p-5 dark:border-white/10">
+              <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <div class="text-sm font-black text-slate-900 dark:text-white"><i class="fa-solid fa-user mr-2 text-slate-400"></i>${order.customer.name}</div>
+                  ${isTable
+                    ? `<div class="mt-2 text-sm font-semibold text-amber-700 dark:text-amber-200"><i class="fa-solid fa-chair mr-2"></i>Table ${order.tableNumber}</div>`
+                    : `<div class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60"><i class="fa-solid fa-location-dot mr-2 text-brand-600 dark:text-brand-200"></i>${order.address}</div>`}
+                </div>
+                <a href="tel:${order.customer.phone}" class="button-press inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.15em] text-white hover:bg-emerald-700"><i class="fa-solid fa-phone"></i>${order.customer.phone}</a>
+              </div>
+              ${order.instructions ? `<div class="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs font-bold text-orange-700 dark:border-orange-500/15 dark:bg-orange-500/10 dark:text-orange-200"><i class="fa-solid fa-comment-dots mr-2"></i>${order.instructions}</div>` : ''}
+            </div>
+            <div class="space-y-3 p-5">
+              ${order.items.map(item => `
+                <div class="flex items-start justify-between gap-4 rounded-2xl border border-black/5 bg-black/[0.02] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+                  <div class="min-w-0">
+                    <div class="text-sm font-black text-slate-900 dark:text-white">${item.qty}x ${item.name}</div>
+                    ${item.tokenRedeemed ? `<div class="mt-1 text-[10px] font-black uppercase tracking-[0.16em] text-yellow-700 dark:text-yellow-200"><i class="fa-solid fa-coins mr-1"></i>Token Reward</div>` : ''}
+                  </div>
+                  <div class="shrink-0 text-sm font-black text-slate-700 dark:text-white/80">${fmt(item.price * item.qty)}</div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="border-t border-black/5 p-5 dark:border-white/10">
+              <div class="mb-4 flex items-end justify-between">
+                <div>
+                  <div class="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Total</div>
+                  <div class="text-2xl font-black text-slate-900 dark:text-white">${fmt(order.total)}</div>
+                </div>
+                ${order.tokensSpent ? `<div class="rounded-2xl bg-yellow-50 px-3 py-2 text-xs font-black text-yellow-800 dark:bg-yellow-500/10 dark:text-yellow-100">Spent ${order.tokensSpent} tokens</div>` : ''}
+              </div>
+              ${actions}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.updateOrderStatus = (id, status) => {
+      const orders = getOrders();
+      const idx = orders.findIndex(order => order.id === id);
+      if (idx === -1) return;
+      orders[idx].status = status;
+      saveOrders(orders);
+      showToast(`Order ${id} updated to ${STATUSES[status].label}`);
+    };
+
+    // ====== ON TABLE ======
+    window.openOnTableModal = () => {
+      otItems = [];
+      otTableNumber = null;
+      document.getElementById('ot-item-search').value = '';
+      document.getElementById('ot-item-dropdown').classList.add('hidden');
+      document.getElementById('ot-instructions').value = '';
+      renderOTTableGrid();
+      renderOTItems();
+      const modal = document.getElementById('on-table-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+    };
+
+    window.closeOnTableModal = () => {
+      const modal = document.getElementById('on-table-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      document.body.style.overflow = 'auto';
+    };
+
+    function renderOTTableGrid() {
+      document.getElementById('table-number-grid').innerHTML = Array.from({ length: 8 }, (_, i) => i + 1).map(n => `
+        <button type="button" onclick="selectOTTable(${n})" class="button-press rounded-2xl border px-4 py-3 text-sm font-extrabold ${otTableNumber === n ? 'border-brand-800 bg-brand-800 text-white shadow-lg shadow-brand-900/15' : 'border-black/5 bg-black/[0.03] text-slate-700 hover:border-brand-300 dark:border-white/10 dark:bg-white/5 dark:text-white'}">T${n}</button>
+      `).join('');
+    }
+
+    window.selectOTTable = (n) => { otTableNumber = n; renderOTTableGrid(); };
+
+    window.filterOTItems = () => {
+      const q = document.getElementById('ot-item-search').value.trim().toLowerCase();
+      const dropdown = document.getElementById('ot-item-dropdown');
+      if (!q) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+      const results = menuData.filter(item => item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q));
+      if (!results.length) {
+        dropdown.innerHTML = '<div class="p-4 text-sm font-bold text-slate-400">No items found</div>';
+        dropdown.classList.remove('hidden');
+        return;
+      }
+      dropdown.innerHTML = results.map(item => `
+        <div onclick="addOTItem('${item.id}')" class="cursor-pointer border-b border-black/5 px-4 py-3 last:border-b-0 hover:bg-brand-50 dark:border-white/10 dark:hover:bg-white/[0.04]">
+          <div class="text-sm font-black text-slate-900 dark:text-white">${item.name}</div>
+          <div class="mt-1 text-xs font-bold text-slate-500 dark:text-white/55">${item.category} • ${fmt(item.price)}</div>
+        </div>
+      `).join('');
+      dropdown.classList.remove('hidden');
+    };
+
+    window.addOTItem = (id) => {
+      const item = menuData.find(i => i.id === id);
+      const existing = otItems.find(i => i.item.id === id);
+      if (existing) existing.qty += 1;
+      else otItems.push({ item, qty: 1 });
+      document.getElementById('ot-item-search').value = '';
+      document.getElementById('ot-item-dropdown').classList.add('hidden');
+      renderOTItems();
+    };
+
+    window.updateOTQty = (id, delta) => {
+      const idx = otItems.findIndex(i => i.item.id === id);
+      if (idx === -1) return;
+      otItems[idx].qty += delta;
+      if (otItems[idx].qty <= 0) otItems.splice(idx, 1);
+      renderOTItems();
+    };
+
+    function renderOTItems() {
+      const list = document.getElementById('ot-items-list');
+      const bill = document.getElementById('ot-bill-items');
+      const total = otItems.reduce((sum, entry) => sum + entry.item.price * entry.qty, 0);
+      if (!otItems.length) {
+        list.innerHTML = '<div class="rounded-2xl border border-dashed border-black/10 bg-black/[0.02] px-4 py-6 text-center text-sm font-bold text-slate-400 dark:border-white/10 dark:bg-white/[0.03]">No items added yet</div>';
+        bill.innerHTML = '<div class="text-sm font-medium text-slate-400">No line items yet</div>';
+      } else {
+        list.innerHTML = otItems.map(entry => `
+          <div class="rounded-[1.3rem] border border-black/5 bg-black/[0.03] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <div class="text-sm font-black text-slate-900 dark:text-white">${entry.item.name}</div>
+                <div class="mt-1 text-xs font-bold text-slate-500 dark:text-white/55">${fmt(entry.item.price)} each</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="updateOTQty('${entry.item.id}',-1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm dark:bg-white/10 dark:text-white">-</button>
+                <span class="w-5 text-center text-sm font-black text-slate-900 dark:text-white">${entry.qty}</span>
+                <button onclick="updateOTQty('${entry.item.id}',1)" class="button-press flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm dark:bg-white/10 dark:text-white">+</button>
+                <span class="ml-2 text-sm font-black text-slate-900 dark:text-white">${fmt(entry.item.price * entry.qty)}</span>
+              </div>
+            </div>
+          </div>
+        `).join('');
+        bill.innerHTML = otItems.map(entry => `
+          <div class="flex items-center justify-between rounded-2xl bg-black/[0.03] px-4 py-3 text-sm font-bold text-slate-700 dark:bg-white/[0.03] dark:text-white/75">
+            <span>${entry.qty}x ${entry.item.name}</span>
+            <span class="font-black text-slate-900 dark:text-white">${fmt(entry.item.price * entry.qty)}</span>
+          </div>
+        `).join('');
+      }
+      document.getElementById('ot-total').innerText = fmt(total);
+    }
+
+    window.placeOnTableOrder = () => {
+      if (!otTableNumber) return showToast('Please select a table number', true);
+      if (!otItems.length) return showToast('Please add at least one item', true);
+      const instructions = document.getElementById('ot-instructions').value.trim();
+      const total = otItems.reduce((sum, entry) => sum + entry.item.price * entry.qty, 0);
+      const order = {
+        id: 'TBL' + Math.floor(100000 + Math.random() * 900000),
+        customer: { name: currentUser?.name || 'Staff', phone: currentUser?.phone || '9999999999', isStaff: true },
+        address: `Table ${otTableNumber}`,
+        tableNumber: otTableNumber,
+        instructions,
+        items: otItems.map(entry => ({ ...entry.item, qty: entry.qty })),
+        total,
+        status: 'RECEIVED',
+        orderType: 'table',
+        timestamp: new Date().toISOString()
+      };
+      const orders = getOrders();
+      orders.push(order);
+      saveOrders(orders);
+      closeOnTableModal();
+      showToast(`On-table order created for Table ${otTableNumber}`);
+      renderStaffOrders();
+    };
+
+    // ====== COUPONS ======
+    window.createCoupon = () => {
+      const code = document.getElementById('cpn-code').value.trim().toUpperCase();
+      const val = parseFloat(document.getElementById('cpn-val').value);
+      if (!code || !val || val <= 0) return showToast('Enter a valid coupon code and amount', true);
+      const coupons = getCoupons();
+      coupons.push({ code, val, active: true, id: Date.now() });
+      saveCoupons(coupons);
+      document.getElementById('cpn-code').value = '';
+      document.getElementById('cpn-val').value = '';
+      renderCoupons();
+      renderStaffSummary();
+      showToast('Coupon created!');
+    };
+
+    window.deleteCoupon = (id) => {
+      saveCoupons(getCoupons().filter(c => c.id !== id));
+      renderCoupons();
+      renderStaffSummary();
+    };
+
+    function renderCoupons() {
+      const coupons = getCoupons();
+      const container = document.getElementById('active-coupons-container');
+      if (!container) return;
+      if (!coupons.length) {
+        container.innerHTML = `
+          <div class="col-span-full rounded-[2rem] surface-card px-6 py-16 text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-200"><i class="fa-solid fa-ticket text-xl"></i></div>
+            <h4 class="mt-5 text-xl font-black text-slate-900 dark:text-white">No active coupons</h4>
+            <p class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60">Create a discount code to launch a new offer.</p>
+          </div>
+        `;
+        return;
+      }
+      container.innerHTML = coupons.map(coupon => `
+        <div class="relative overflow-hidden rounded-[1.8rem] border border-dashed border-brand-300 bg-white p-5 shadow-lg shadow-brand-900/5 dark:border-brand-500/20 dark:bg-[#15151a]">
+          <div class="absolute -left-3 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-[#f5f1eb] dark:bg-[#0b0b0f]"></div>
+          <div class="absolute -right-3 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-[#f5f1eb] dark:bg-[#0b0b0f]"></div>
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="text-[10px] font-black uppercase tracking-[0.2em] text-brand-700 dark:text-brand-200">Coupon Code</div>
+              <div class="mt-2 text-3xl font-black tracking-[0.06em] text-slate-900 dark:text-white">${coupon.code}</div>
+              <div class="mt-2 text-sm font-bold text-slate-500 dark:text-white/60">Flat ${fmt(coupon.val)} OFF</div>
+            </div>
+            <button onclick="deleteCoupon(${coupon.id})" class="button-press flex h-11 w-11 items-center justify-center rounded-2xl bg-black/[0.04] text-slate-500 hover:text-red-500 dark:bg-white/5 dark:text-white/60"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ====== TOKEN SYSTEM ======
+    window.filterTokItems = () => {
+      const q = document.getElementById('tok-item-search').value.trim().toLowerCase();
+      const dropdown = document.getElementById('tok-item-dropdown');
+      if (!q) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+      const results = menuData.filter(item => item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q));
+      if (!results.length) {
+        dropdown.innerHTML = '<div class="p-4 text-sm font-bold text-slate-400">No items found</div>';
+        dropdown.classList.remove('hidden');
+        return;
+      }
+      dropdown.innerHTML = results.map(item => `
+        <div onclick="selectTokItem('${item.id}')" class="cursor-pointer border-b border-black/5 px-4 py-3 last:border-b-0 hover:bg-yellow-50 dark:border-white/10 dark:hover:bg-white/[0.04]">
+          <div class="text-sm font-black text-slate-900 dark:text-white">${item.name}</div>
+          <div class="mt-1 text-xs font-bold text-slate-500 dark:text-white/55">${item.category} • ${fmt(item.price)}</div>
+        </div>
+      `).join('');
+      dropdown.classList.remove('hidden');
+    };
+
+    window.selectTokItem = (id) => {
+      tokSelectedItem = menuData.find(item => item.id === id);
+      document.getElementById('tok-item-search').value = '';
+      document.getElementById('tok-item-dropdown').classList.add('hidden');
+      document.getElementById('tok-selected-name').innerText = tokSelectedItem.name;
+      document.getElementById('tok-selected-price').innerText = `${fmt(tokSelectedItem.price)} • ${tokSelectedItem.category}`;
+      document.getElementById('tok-selected-item-preview').classList.remove('hidden');
+    };
+
+    window.clearTokSelectedItem = () => {
+      tokSelectedItem = null;
+      document.getElementById('tok-item-search').value = '';
+      document.getElementById('tok-selected-item-preview').classList.add('hidden');
+    };
+
+    window.toggleTokenSystem = () => {
+      const cfg = getTokenConfig();
+      cfg.active = !cfg.active;
+      saveTokenConfig(cfg);
+      renderTokenItems();
+      renderStaffSummary();
+      if (!cfg.active) {
+        redeemedTokenItems = [];
+        saveRedeemedTokenCart();
+      }
+      window.dispatchEvent(new Event('tokenConfigUpdated'));
+      showToast(cfg.active ? 'Token system is now LIVE!' : 'Token system turned off.');
+    };
+
+    window.saveTokenRewardRules = () => {
+      const amount = parseInt(document.getElementById('tok-earn-amount').value);
+      const reward = parseInt(document.getElementById('tok-earn-reward').value);
+      if (!amount || amount <= 0 || !reward || reward <= 0) return showToast('Enter valid reward rule values', true);
+      const cfg = getTokenConfig();
+      cfg.rewardDivisor = amount;
+      cfg.rewardTokens = reward;
+      saveTokenConfig(cfg);
+      renderTokenItems();
+      if (!document.getElementById('cart-modal').classList.contains('hidden')) renderCartModal();
+      window.dispatchEvent(new Event('tokenConfigUpdated'));
+      showToast('Token reward rules updated!');
+    };
+
+    window.addTokenItem = () => {
+      if (!tokSelectedItem) return showToast('Search and select a menu item', true);
+      const tokens = parseInt(document.getElementById('tok-tokens').value);
+      if (!tokens || tokens <= 0) return showToast('Enter a valid token count', true);
+      const cfg = getTokenConfig();
+      if (cfg.items.find(i => i.menuId === tokSelectedItem.id)) return showToast('Item already exists in token list', true);
+      cfg.items.push({
+        id: Date.now(),
+        menuId: tokSelectedItem.id,
+        name: tokSelectedItem.name,
+        price: tokSelectedItem.price,
+        image: tokSelectedItem.image,
+        tokens
+      });
+      saveTokenConfig(cfg);
+      clearTokSelectedItem();
+      document.getElementById('tok-tokens').value = '';
+      renderTokenItems();
+      window.dispatchEvent(new Event('tokenConfigUpdated'));
+      showToast('Token item added!');
+    };
+
+    window.deleteTokenItem = (id) => {
+      const cfg = getTokenConfig();
+      cfg.items = cfg.items.filter(item => item.id !== id);
+      saveTokenConfig(cfg);
+      redeemedTokenItems = redeemedTokenItems.filter(item => item.id !== id);
+      saveRedeemedTokenCart();
+      renderTokenItems();
+      window.dispatchEvent(new Event('tokenConfigUpdated'));
+    };
+
+    function renderTokenItems() {
+      const cfg = getTokenConfig();
+      const toggleBtn = document.getElementById('token-toggle-btn');
+      const label = document.getElementById('token-status-label');
+      const container = document.getElementById('token-items-container');
+      if (toggleBtn) {
+        toggleBtn.innerText = cfg.active ? 'Turn OFF' : 'Turn ON';
+        toggleBtn.className = cfg.active
+          ? 'button-press rounded-2xl bg-red-100 px-4 py-3 text-sm font-extrabold text-red-700 hover:bg-red-200 dark:bg-red-500/10 dark:text-red-200'
+          : 'button-press rounded-2xl bg-emerald-100 px-4 py-3 text-sm font-extrabold text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200';
+      }
+      if (label) label.innerText = `Status: ${cfg.active ? 'LIVE 🟢' : 'OFF 🔴'}`;
+      document.getElementById('tok-earn-amount').value = cfg.rewardDivisor || 50;
+      document.getElementById('tok-earn-reward').value = cfg.rewardTokens || 2;
+      if (!container) return;
+      if (!cfg.items || !cfg.items.length) {
+        container.innerHTML = `
+          <div class="col-span-full rounded-[2rem] surface-card px-6 py-16 text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-200">🪙</div>
+            <h4 class="mt-5 text-xl font-black text-slate-900 dark:text-white">No token items added</h4>
+            <p class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60">Select a menu item and assign the token amount needed to redeem it.</p>
+          </div>
+        `;
+        return;
+      }
+      container.innerHTML = cfg.items.map(item => `
+        <div class="overflow-hidden rounded-[1.8rem] surface-card">
+          <div class="grid sm:grid-cols-[112px,1fr]">
+            <div class="relative h-28 sm:h-full">
+              <img src="${item.image || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=900&q=80'}" alt="${item.name}" class="h-full w-full object-cover">
+            </div>
+            <div class="p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="text-base font-black text-slate-900 dark:text-white">${item.name}</div>
+                  <div class="mt-1 text-sm font-bold text-slate-500 dark:text-white/55">Regular value: ${fmt(item.price || 0)}</div>
+                  <div class="mt-2 inline-flex rounded-full bg-yellow-50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-yellow-800 dark:bg-yellow-500/10 dark:text-yellow-100"><i class="fa-solid fa-coins mr-2"></i>${item.tokens} Tokens</div>
+                </div>
+                <button onclick="deleteTokenItem(${item.id})" class="button-press flex h-10 w-10 items-center justify-center rounded-2xl bg-black/[0.04] text-slate-500 hover:text-red-500 dark:bg-white/5 dark:text-white/60"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ====== REVENUE ======
+    window.setRevFilter = (filter) => {
+      revFilter = filter;
+      revStartDate = null;
+      revEndDate = null;
+      ['today','week','month','filter'].forEach(key => {
+        const el = document.getElementById('rev-' + key);
+        if (el) el.classList.toggle('active', key === filter);
+      });
+      document.getElementById('rev-calendar-box').classList.add('hidden');
+      renderRevenue();
+    };
+
+    window.toggleRevCalendar = () => {
+      const box = document.getElementById('rev-calendar-box');
+      box.classList.toggle('hidden');
+      if (!box.classList.contains('hidden')) {
+        renderCal('rev-start-cal', 'rev', 'start');
+        renderCal('rev-end-cal', 'rev', 'end');
+      }
+    };
+
+    window.setRevTypeFilter = (filter) => {
+      revTypeFilter = filter;
+      ['all','delivery','table'].forEach(key => {
+        const el = document.getElementById('rev-ftab-' + key);
+        if (el) el.classList.toggle('active', key === filter);
+      });
+      renderRevenue();
+    };
+
+    function getRevDateRange() {
+      const now = new Date();
+      if (revFilter === 'today') {
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return { start, end: new Date(start.getTime() + 86400000 - 1) };
+      }
+      if (revFilter === 'week') {
+        const day = now.getDay();
+        const start = new Date(now);
+        start.setDate(now.getDate() - day);
+        start.setHours(0,0,0,0);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        end.setHours(23,59,59,999);
+        return { start, end };
+      }
+      if (revFilter === 'month') {
+        return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59) };
+      }
+      if (revFilter === 'custom' && revStartDate && revEndDate) {
+        return { start: new Date(revStartDate + 'T00:00:00'), end: new Date(revEndDate + 'T23:59:59') };
+      }
+      return { start: new Date(0), end: new Date() };
+    }
+
+    function renderRevenue() {
+      const { start, end } = getRevDateRange();
+      const delivered = getOrders().filter(order => {
+        const d = new Date(order.timestamp);
+        return order.status === 'DELIVERED' && d >= start && d <= end;
+      });
+      let orders = delivered.slice();
+      if (revTypeFilter === 'delivery') orders = delivered.filter(order => order.orderType !== 'table');
+      else if (revTypeFilter === 'table') orders = delivered.filter(order => order.orderType === 'table');
+
+      const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
+      const totalItems = orders.reduce((sum, order) => sum + order.items.reduce((itemSum, item) => itemSum + item.qty, 0), 0);
+      const avgOrder = orders.length ? Math.round(totalRevenue / orders.length) : 0;
+      const deliveryRevenue = delivered.filter(order => order.orderType !== 'table').reduce((sum, order) => sum + order.total, 0);
+      const tableRevenue = delivered.filter(order => order.orderType === 'table').reduce((sum, order) => sum + order.total, 0);
+      const deliveryCount = delivered.filter(order => order.orderType !== 'table').length;
+      const tableCount = delivered.filter(order => order.orderType === 'table').length;
+      const typeLabel = revTypeFilter === 'delivery' ? 'Home Delivery' : revTypeFilter === 'table' ? 'On Table' : 'All Orders';
+      const showDeliveredMix = revTypeFilter === 'all';
+
+      document.getElementById('rev-summary-card').innerHTML = `
+        <div class="grid gap-4 ${showDeliveredMix ? 'lg:grid-cols-[1.1fr,0.9fr]' : ''}">
+          <div class="rounded-[1.7rem] bg-gradient-to-br from-[#2a1a12] via-[#6f4326] to-[#c68f58] p-6 text-white shadow-lg shadow-brand-900/10">
+            <div class="text-[11px] font-black uppercase tracking-[0.24em] text-white/65">Total Revenue • ${typeLabel}</div>
+            <div class="mt-3 text-5xl font-black">${fmt(totalRevenue)}</div>
+            <div class="mt-5 grid grid-cols-2 gap-3">
+              <div class="rounded-2xl bg-white/10 p-4 backdrop-blur-md">
+                <div class="text-[10px] font-black uppercase tracking-[0.18em] text-white/55">Orders</div>
+                <div class="mt-2 text-2xl font-black">${orders.length}</div>
+              </div>
+              <div class="rounded-2xl bg-white/10 p-4 backdrop-blur-md">
+                <div class="text-[10px] font-black uppercase tracking-[0.18em] text-white/55">Items Sold</div>
+                <div class="mt-2 text-2xl font-black">${totalItems}</div>
+              </div>
+            </div>
+          </div>
+          <div class="grid gap-4">
+            <div class="rounded-[1.6rem] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
+              <div class="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Average Order Value</div>
+              <div class="mt-2 text-3xl font-black text-slate-900 dark:text-white">${fmt(avgOrder)}</div>
+            </div>
+            ${showDeliveredMix ? `<div class="rounded-[1.6rem] border border-black/5 bg-black/[0.02] p-5 dark:border-white/10 dark:bg-white/[0.03]">
+              <div class="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-white/60">Delivered Mix</div>
+              <div class="mt-3 grid grid-cols-2 gap-3">
+                <div class="rounded-2xl bg-brand-50 p-4 dark:bg-brand-900/20">
+                  <div class="text-[10px] font-black uppercase tracking-[0.16em] text-brand-700 dark:text-brand-200">Delivery</div>
+                  <div class="mt-2 text-xl font-black text-slate-900 dark:text-white">${fmt(deliveryRevenue)}</div>
+                  <div class="mt-1 text-xs font-bold text-brand-700 dark:text-brand-200">${deliveryCount} orders</div>
+                </div>
+                <div class="rounded-2xl bg-amber-50 p-4 dark:bg-amber-500/10">
+                  <div class="text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 dark:text-amber-200">On Table</div>
+                  <div class="mt-2 text-xl font-black text-slate-900 dark:text-white">${fmt(tableRevenue)}</div>
+                  <div class="mt-1 text-xs font-bold text-amber-700 dark:text-amber-200">${tableCount} orders</div>
+                </div>
+              </div>
+            </div>` : ''}
+          </div>
+        </div>
+      `;
+
+      const list = document.getElementById('rev-orders-list');
+      if (!orders.length) {
+        list.innerHTML = `
+          <div class="rounded-[2rem] surface-card px-6 py-16 text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200"><i class="fa-solid fa-chart-column text-xl"></i></div>
+            <h4 class="mt-5 text-xl font-black text-slate-900 dark:text-white">No completed orders in this period</h4>
+            <p class="mt-2 text-sm font-medium text-slate-500 dark:text-white/60">Adjust the date range or type filter to inspect a different window.</p>
+          </div>
+        `;
+        return;
+      }
+      list.innerHTML = orders.map(order => {
+        const isTable = order.orderType === 'table';
+        const time = new Date(order.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return `
+          <div class="rounded-[1.6rem] surface-card p-4">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div class="text-base font-black text-slate-900 dark:text-white">${order.id}</div>
+                <div class="mt-1 text-sm font-bold text-slate-500 dark:text-white/55">${time} • ${order.customer.name}</div>
+                <div class="mt-2 text-xs font-black uppercase tracking-[0.16em] ${isTable ? 'text-amber-700 dark:text-amber-200' : 'text-brand-700 dark:text-brand-200'}">${isTable ? `<i class='fa-solid fa-chair mr-1'></i>On Table • T${order.tableNumber}` : `<i class='fa-solid fa-motorcycle mr-1'></i>Home Delivery`}</div>
+              </div>
+              <div class="text-right">
+                <div class="text-2xl font-black text-slate-900 dark:text-white">${fmt(order.total)}</div>
+                <div class="mt-1 text-xs font-bold text-slate-400 dark:text-white/45">${order.items.reduce((sum, item) => sum + item.qty, 0)} items</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      renderStaffSummary();
+    }
+
+    // ====== CALENDAR ======
+    function renderCal(containerId, prefix, target) {
+      const isRev = prefix === 'rev';
+      const year = isRev ? revCalYear : compCalYear;
+      const month = isRev ? revCalMonth : compCalMonth;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const days = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const today = new Date();
+      const selectedStart = isRev ? revStartDate : compStartDate;
+      const selectedEnd = isRev ? revEndDate : compEndDate;
+
+      document.getElementById(containerId).innerHTML = `
+        <div class="rounded-[1.6rem] border border-black/5 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+          <div class="mb-3 flex items-center justify-between">
+            <button onclick="changeCal('${prefix}',-1,'${containerId}','${target}')" class="button-press flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-600 shadow-sm dark:bg-white/10 dark:text-white">‹</button>
+            <div class="text-sm font-black text-slate-900 dark:text-white">${months[month]} ${year}</div>
+            <button onclick="changeCal('${prefix}',1,'${containerId}','${target}')" class="button-press flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-600 shadow-sm dark:bg-white/10 dark:text-white">›</button>
+          </div>
+          <div class="cal-grid mb-2">${days.map(d => `<div class="cal-day cursor-default text-slate-400 hover:bg-transparent dark:text-white/35">${d}</div>`).join('')}</div>
+          <div class="cal-grid">
+            ${Array(firstDay).fill('<div></div>').join('')}
+            ${Array.from({ length: daysInMonth }, (_, i) => {
+              const date = new Date(year, month, i + 1);
+              const iso = toLocalISO(date);
+              const isToday = date.toDateString() === today.toDateString();
+              const isSelected = (target === 'start' && selectedStart === iso) || (target === 'end' && selectedEnd === iso);
+              return `<div class="cal-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : 'text-slate-700 dark:text-white/80'}" onclick="selectCalDate('${iso}','${prefix}','${target}','${containerId}')">${i + 1}</div>`;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    window.changeCal = (prefix, dir, containerId, target) => {
+      if (prefix === 'rev') {
+        revCalMonth += dir;
+        if (revCalMonth > 11) { revCalMonth = 0; revCalYear++; }
+        if (revCalMonth < 0) { revCalMonth = 11; revCalYear--; }
+        renderCal(containerId, 'rev', target);
+      } else {
+        compCalMonth += dir;
+        if (compCalMonth > 11) { compCalMonth = 0; compCalYear++; }
+        if (compCalMonth < 0) { compCalMonth = 11; compCalYear--; }
+        renderCal(containerId, 'comp', target);
+      }
+    };
+
+    window.selectCalDate = (iso, prefix, target, containerId) => {
+      if (prefix === 'rev') {
+        if (target === 'start') {
+          revStartDate = iso;
+          document.getElementById('rev-start-display').innerText = iso;
+        } else {
+          revEndDate = iso;
+          document.getElementById('rev-end-display').innerText = iso;
+        }
+        renderCal(containerId, 'rev', target);
+      } else {
+        if (target === 'start') {
+          compStartDate = iso;
+          document.getElementById('comp-start-display').innerText = iso;
+        } else {
+          compEndDate = iso;
+          document.getElementById('comp-end-display').innerText = iso;
+        }
+        renderCal(containerId, 'comp', target);
+      }
+    };
+
+    window.applyCustomRevFilter = () => {
+      if (!revStartDate || !revEndDate) return showToast('Select both start and end dates', true);
+      revFilter = 'custom';
+      ['today','week','month'].forEach(key => {
+        const el = document.getElementById('rev-' + key);
+        if (el) el.classList.remove('active');
+      });
+      document.getElementById('rev-filter').classList.add('active');
+      renderRevenue();
+    };
+
+    // ====== EVENTS ======
+    document.addEventListener('click', (e) => {
+      ['ot-item-dropdown','tok-item-dropdown'].forEach(id => {
+        const dd = document.getElementById(id);
+        const input = document.getElementById(id === 'ot-item-dropdown' ? 'ot-item-search' : 'tok-item-search');
+        if (dd && input && !dd.contains(e.target) && e.target !== input) dd.classList.add('hidden');
+      });
+    });
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"1954b47c125f43f8b4338b3c4f804e4f","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
